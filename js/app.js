@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=9";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=9";
+import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=10";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=10";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -95,7 +95,8 @@ function renderCard(sensor) {
   return `<article class="sensor-card">
     <span class="sensor-icon" aria-hidden="true">${safe(sensor.icon)}</span>
     <div><h2>${safe(sensor.label)}</h2><p class="reading">${safe(sensor.value)}<small>${safe(sensor.unit)}</small></p>
-    <span class="status ${tone}"><b aria-hidden="true">${marker}</b>${safe(sensor.status)}</span></div>
+    <span class="status ${tone}"><b aria-hidden="true">${marker}</b>${safe(sensor.status)}</span>
+    ${sensor.detail ? `<p class="sensor-detail">${safe(sensor.detail)}</p>` : ""}</div>
   </article>`;
 }
 

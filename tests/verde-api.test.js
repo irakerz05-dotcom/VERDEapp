@@ -65,7 +65,7 @@ const backendState = {
   sensors: {
     ph: { status: "CONNECTED", value: 6.1, unit: null, detail: "" },
     ec: { status: "CONNECTED", value: 1.5, unit: "mS/cm", detail: "" },
-    tds: { status: "NOT CONNECTED", value: null, unit: "ppm", detail: "Pending" },
+    tds: { status: "CONNECTED — CALIBRATION REQUIRED", value: null, unit: "ppm", detail: "ADS1115 A2 raw voltage", raw_value: 3.35, raw_unit: "V" },
     water_temperature: { status: "NOT CONNECTED", value: null, unit: "°C", detail: "Pending" },
     turbidity: { status: "NOT CONNECTED", value: null, unit: "NTU", detail: "Pending" },
     ambient_humidity: { status: "CONNECTED", value: 77, unit: "% RH", detail: "DHT11", last_reading_timestamp: "2026-09-25T03:59:59+00:00" }
@@ -90,7 +90,10 @@ test("backend status is normalized without inventing unavailable readings or AI 
   assert.equal(snapshot.mode, "Semi-Automation");
   assert.equal(snapshot.requestedMode, "Full Automation");
   assert.match(snapshot.modeOverride, /Required water sensor/);
-  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "TDS").value, "—");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "TDS").value, "3.35");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "TDS").unit, "V");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "TDS").isRaw, true);
+  assert.match(snapshot.sensors.find((sensor) => sensor.label === "TDS").detail, /raw voltage/);
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Ambient Humidity").value, "77");
   assert.equal(snapshot.plant.pestDetected, null);
   assert.equal(snapshot.plant.frameUrl, "/api/camera/frame?v=4");

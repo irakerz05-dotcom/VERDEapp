@@ -74,6 +74,11 @@ development-only `MockVerdeApi`. The live adapter uses `/api/status`,
 URLs supplied by the backend. It preserves missing sensor/model values as
 unavailable instead of fabricating results.
 
+When the backend supplies ADS1115 `raw_value` and `raw_unit` metadata, the pH,
+EC/TDS and turbidity cards show the live electrical voltage together with
+`CONNECTED — CALIBRATION REQUIRED`. Raw volts are not relabeled as calibrated
+pH, mS/cm, ppm or NTU values.
+
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 
 ## Development workflow across computers

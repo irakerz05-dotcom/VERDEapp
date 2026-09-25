@@ -100,13 +100,16 @@ export function normalizeBackendSnapshot(state) {
 
   const sensors = Object.entries(SENSOR_PRESENTATION).map(([key, presentation]) => {
     const sensor = state.sensors[key] ?? {};
-    const value = sensor.value;
+    const calibratedValue = sensor.value;
+    const rawValue = finiteNumber(sensor.raw_value);
+    const showRaw = (calibratedValue === null || calibratedValue === undefined) && rawValue !== null;
     return {
       ...presentation,
-      value: value === null || value === undefined ? "—" : String(value),
-      unit: sensor.unit ?? "",
+      value: showRaw ? String(rawValue) : calibratedValue === null || calibratedValue === undefined ? "—" : String(calibratedValue),
+      unit: showRaw ? sensor.raw_unit ?? "V" : sensor.unit ?? "",
       status: sensor.status ?? "UNAVAILABLE",
       detail: sensor.detail ?? "",
+      isRaw: showRaw,
       lastReadingAt: sensor.last_reading_timestamp ?? null
     };
   });

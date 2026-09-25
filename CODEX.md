@@ -6,20 +6,29 @@ VERDE (Vegetation Environment Recognition and Detection Engine) is a thesis prot
 
 ## Current repository state
 
-This is a new static PWA implementation. The original backend, Raspberry Pi integration, database, model code, and previous dashboard files have not been recovered, so no backend behavior has been replaced. All displayed readings are explicitly mock development data.
+This static PWA is integrated with the recovered `VERDE-Software` Raspberry Pi
+backend. Live mode is the default and uses same-origin `/api/*` routes. An
+explicit `?api=mock` mode remains available for frontend-only development.
+Live failures never silently fall back to mock readings.
 
 ## Frontend
 
 - Dependency-free static HTML/CSS/JavaScript PWA.
 - Entry point: `index.html`.
 - UI code: `js/app.js`.
-- Mock data/API boundary: `js/services/verde-api.js`.
+- Live and mock API boundary plus backend-payload normalization: `js/services/verde-api.js`.
+- Shared safe-rendering and chart helpers: `js/verde-ui.js`.
 - Offline installation: `manifest.webmanifest` and `service-worker.js`.
 - The UI is mobile-first and works in Android Chrome.
+- Dependency-free automated tests: `tests/`, run with `node --test`.
 
-## Intended future backend contract
+## Backend contract
 
-The PWA must call a local-network backend on the Raspberry Pi, never GPIO directly. Expected API capabilities: system status, current sensor snapshot, plant/detection output, fusion output, alert history, historical readings, mode-change request, and confirmation/decline of a recommended dosing action. Confirm exact routes and payloads against the recovered backend before implementation.
+The PWA calls the local backend on the Raspberry Pi, never GPIO directly. It
+uses status, snapshot history, event history, camera frames, session-token, and
+mode-change routes already implemented by `VERDE-Software`. The backend can
+serve this repository with `python run.py --web-root ../VERDEapp`, keeping all
+requests same-origin. Physical confirmation/actuation remains blocked.
 
 ## VERDE domain rules to preserve
 
@@ -40,9 +49,9 @@ The PWA must call a local-network backend on the Raspberry Pi, never GPIO direct
 
 ## Current TODOs
 
-1. Recover or build the Raspberry Pi backend and database.
-2. Define and implement the actual API contract.
-3. Replace mock adapter with a real API client, including offline/timeout/error handling.
-4. Add backend-enforced authentication/authorization appropriate to local deployment.
-5. Test UI against live sensor, YOLOv8, Random Forest, fusion, alert, and actuator data.
-6. Validate installation and local-network access on Android.
+1. Validate the integrated PWA on the Pi with the already tested DHT11 and camera.
+2. Integrate and calibrate the remaining water sensors without inventing values.
+3. Integrate validated YOLOv8, Random Forest, and fusion models.
+4. Define a secure deployment design before allowing non-loopback/mobile access.
+5. Keep physical actuation disabled until the relay, pump, interlock, watchdog,
+   timing, and rearming policies are approved and hardware-validated.

@@ -1,0 +1,10 @@
+{
+  "name": "verde-pwa",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check js/app.js && node --check js/verde-ui.js && node --check js/services/verde-api.js && node --check service-worker.js"
+  }
+}

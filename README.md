@@ -59,12 +59,35 @@ connect to hardware.
 
 ## Android installation
 
-Android live-backend installation is intentionally pending. The validated
-backend currently binds to `127.0.0.1` and rejects non-local Host values, so it
-is available only in a browser running on the Pi (or through a developer SSH
-tunnel). Do not weaken those checks merely to expose the dashboard over Wi-Fi.
-A future phone deployment needs an approved authenticated HTTPS/network design
-before Android PWA installation is enabled.
+The supported remote design is private Tailscale Serve, not a public port or
+Tailscale Funnel. The backend stays bound to `127.0.0.1`; Tailscale terminates
+HTTPS, applies tailnet access controls, and forwards an authenticated identity
+to the loopback service. Start the backend with its exact private origin:
+
+```bash
+python3 run.py --web-root ../VERDEapp \
+  --trusted-origin https://YOUR-PI.YOUR-TAILNET.ts.net
+tailscale serve --bg 8000
+tailscale serve status
+```
+
+The Raspberry Pi and Android phone must be signed into the approved tailnet.
+Open the HTTPS URL in Android Chrome, then use the VERDE Settings page's
+**Install app** button or Chrome's **Install app / Add to Home screen** menu.
+Never use `tailscale funnel`, router port-forwarding, or a public HTTP URL for
+this prototype.
+
+Installation does not imply calibration or model readiness. The installed app
+continues to show live DHT11, DS18B20, camera, and ADS1115 electrical evidence;
+uncalibrated chemistry remains explicitly marked **CALIBRATION REQUIRED**, AI
+components remain unavailable until trusted models are integrated, and
+physical outputs remain disabled.
+
+The service worker caches only the application shell. `/api/*` responses and
+camera readings are always network-only, so reopening the app without a Pi
+connection cannot present old readings as live. Frontend releases show an
+update-ready message and take effect after the installed app is closed and
+reopened.
 
 ## Raspberry Pi integration
 

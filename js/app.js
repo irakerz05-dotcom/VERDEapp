@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=13";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=13";
+import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=14";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=14";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -23,6 +23,7 @@ let alertFilter = "All";
 let renderSequence = 0;
 let renderedPage = null;
 let lastSnapshot = null;
+let deferredInstallPrompt = null;
 const lastPageData = new Map();
 
 const icon = (name) => ({ Dashboard: "⌂", Plants: "♧", History: "◷", Alerts: "♢", Settings: "⚙" })[name] ?? "•";
@@ -166,6 +167,42 @@ function bindModeButton(data) {
   button?.addEventListener("click", () => requestModeChange(data, button));
 }
 
+function isInstalledPwa() {
+  return window.matchMedia?.("(display-mode: standalone)").matches === true;
+}
+
+async function requestPwaInstallation(button) {
+  if (isInstalledPwa()) {
+    showToast("VERDE is already installed on this device.");
+    return;
+  }
+  if (!window.isSecureContext) {
+    showToast("Open VERDE through its private HTTPS address before installing.", "warn");
+    return;
+  }
+  if (!deferredInstallPrompt) {
+    showToast("In Android Chrome, open the menu and choose Install app or Add to Home screen.", "warn");
+    return;
+  }
+  button.disabled = true;
+  try {
+    await deferredInstallPrompt.prompt();
+    const choice = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    showToast(choice.outcome === "accepted" ? "VERDE installation accepted." : "Installation was cancelled.",
+      choice.outcome === "accepted" ? "good" : "warn");
+  } catch {
+    showToast("The browser could not open the installation prompt. Use Chrome's Install app menu instead.", "warn");
+  } finally {
+    if (button.isConnected) button.disabled = false;
+  }
+}
+
+function bindInstallButton() {
+  const button = document.querySelector("[data-install-button]");
+  button?.addEventListener("click", () => requestPwaInstallation(button));
+}
+
 function renderDashboard(data) {
   const time = niceTime(data.updatedAt);
   const fusionHeading = /^(High|Medium|Low)$/i.test(data.fusion.confidence)
@@ -273,14 +310,18 @@ function renderAlerts(data, alerts) {
 }
 
 function renderSettings(data) {
+  const installed = isInstalledPwa();
+  const installLabel = installed ? "Installed" : deferredInstallPrompt ? "Install app" : "Installation help";
   const content = `<section class="page-title"><h2>Settings</h2><p>${safe(sourceLabel(data))}</p></section>
     <section class="settings-list">
       <article><div><h2>Backend connection</h2><p>${data.isMock ? "Explicit development adapter; no hardware connection." : "Same-origin connection to the local VERDE service."}</p></div><span>${safe(data.settings.backendLabel)}</span></article>
+      <article><div><h2>Install on this device</h2><p>Installation requires the private HTTPS address. Live readings still require a connection to the Raspberry Pi.</p></div><button data-install-button type="button" class="secondary"${installed ? " disabled" : ""}>${installLabel}</button></article>
       <article><div><h2>Operating mode</h2><p>Active: ${safe(data.mode)} · Requested: ${safe(data.requestedMode || data.mode)}. Safety validation is enforced by the backend.</p></div><button data-mode-button type="button" class="secondary">Change mode</button></article>
       <article><div><h2>Application version</h2><p>VERDE monitoring PWA</p></div><span>${safe(data.settings.version)}</span></article>
     </section>`;
   app.innerHTML = renderShell(content, data);
   bindModeButton(data);
+  bindInstallButton();
   bindNav();
 }
 
@@ -340,12 +381,34 @@ window.addEventListener("hashchange", () => {
 });
 window.addEventListener("online", render);
 window.addEventListener("offline", render);
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  if (activePage === "Settings" && lastSnapshot) renderSettings(lastSnapshot);
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  showToast("VERDE was installed successfully.");
+  if (activePage === "Settings" && lastSnapshot) renderSettings(lastSnapshot);
+});
 
 if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" }).catch(() => {
-    showToast("Offline installation is unavailable in this browser.", "warn");
-  }));
+  window.addEventListener("load", async () => {
+    try {
+      const registration = await navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" });
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        worker?.addEventListener("statechange", () => {
+          if (worker.state === "installed" && navigator.serviceWorker.controller) {
+            showToast("A VERDE update is ready. Close and reopen the app to use it.");
+          }
+        });
+      });
+    } catch {
+      showToast("Offline installation is unavailable in this browser.", "warn");
+    }
+  });
 }
 
 render();

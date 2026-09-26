@@ -52,6 +52,6 @@ requests same-origin. Physical confirmation/actuation remains blocked.
 1. Validate the integrated PWA on the Pi with the already tested DHT11 and camera.
 2. Integrate and calibrate the remaining water sensors without inventing values.
 3. Integrate validated YOLOv8, Random Forest, and fusion models.
-4. Define a secure deployment design before allowing non-loopback/mobile access.
+4. Validate the implemented private Tailscale Serve deployment on the Pi and Android; never substitute public port-forwarding or Funnel.
 5. Keep physical actuation disabled until the relay, pump, interlock, watchdog,
    timing, and rearming policies are approved and hardware-validated.

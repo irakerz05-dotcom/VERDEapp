@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=10";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=10";
+import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=13";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=13";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -15,8 +15,11 @@ const api = usingMock
 const app = document.querySelector("#app");
 const API_TIMEOUT_MS = 4_000;
 const HISTORY_RANGES = ["Today", "24 Hours", "7 Days"];
+const ALERT_FILTERS = ["All", "Critical", "Warnings", "System"];
 let activePage = pageFromHash();
 let historyRange = "Today";
+let historyMetric = null;
+let alertFilter = "All";
 let renderSequence = 0;
 let renderedPage = null;
 let lastSnapshot = null;
@@ -202,30 +205,70 @@ function renderPlants(data) {
 }
 
 function renderHistory(data, history) {
+  historyMetric = history.metricKey;
   const chart = buildChartGeometry(history.values);
   const circles = chart.points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="5" />`).join("");
+  const area = chart.points.length
+    ? `M${chart.points[0].x} 125 ${chart.points.map((point) => `L${point.x} ${point.y}`).join(" ")} L${chart.points.at(-1).x} 125 Z`
+    : "";
+  const unit = history.unit ? ` ${history.unit}` : "";
+  const valueWithUnit = (value) => value === "—" ? value : `${value}${unit}`;
+  const metricButtons = history.metrics.map((metric) => `<button type="button" data-history-metric="${safe(metric.key)}" class="metric-chip ${metric.key === history.metricKey ? "selected" : ""}" aria-pressed="${metric.key === history.metricKey}"><span>${safe(metric.label)}</span><small>${metric.sampleCount} sample${metric.sampleCount === 1 ? "" : "s"}</small></button>`).join("");
+  const recent = history.samples.slice(-6).reverse().map((sample) => `<li><time datetime="${safe(sample.timestamp)}">${safe(sample.label)}</time><strong>${safe(valueWithUnit(sample.value))}</strong></li>`).join("");
+  const incidents = history.incidents.map((incident) => `<li class="incident-item ${incident.tone}"><span class="incident-marker" aria-hidden="true">${incident.state === "RESOLVED" ? "✓" : "!"}</span><div><div class="incident-title-row"><strong>${safe(incident.title)}</strong><span>${incident.state === "RESOLVED" ? "Resolved" : "Problem detected"}</span></div><p>${safe(incident.message)}</p><time datetime="${safe(incident.createdAt)}">${safe(niceTime(incident.createdAt))} · ${safe(relativeAlertTime(incident.createdAt))}</time></div></li>`).join("");
   const content = `<section class="page-title"><h2>History</h2><p>${safe(sourceLabel(data))}</p></section>
     <div class="filter-row" role="group" aria-label="History range">${HISTORY_RANGES.map((range) => `<button type="button" data-history-range="${range}" class="${range === history.range ? "selected" : ""}" aria-pressed="${range === history.range}">${range}</button>`).join("")}</div>
-    <section class="chart-card"><div><h2>${safe(history.title)}</h2><p>${safe(history.description)}</p></div><svg viewBox="0 0 320 150" role="img" aria-label="${safe(history.description)}"><path d="M20 125H304M20 90H304M20 55H304M20 20H304" stroke="#dbe6dd" stroke-dasharray="3"/><path d="${chart.path}" fill="none" stroke="#27813e" stroke-width="4"/><g fill="#27813e">${circles}</g></svg>${history.values.length ? `<div class="chart-labels"><span>${safe(history.labels[0])}</span><span>${safe(history.labels[Math.floor(history.labels.length / 2)])}</span><span>${safe(history.labels.at(-1))}</span></div>` : '<p class="no-chart-data">No pH samples are available in this range.</p>'}</section>
-    <section class="stat-row" aria-label="pH summary"><div><strong>${safe(history.current)}</strong><span>Current</span></div><div><strong>${safe(history.maximum)}</strong><span>Maximum</span></div><div><strong>${safe(history.average)}</strong><span>Average</span></div></section>`;
+    <section class="metric-picker" aria-label="Sensor history metric">${metricButtons}</section>
+    <section class="chart-card history-chart" style="--metric-color:${safe(history.color)}"><header class="chart-head"><div><p class="eyebrow">${safe(history.metricKey.replaceAll("_", " "))}</p><h2>${safe(history.title)}</h2><p>${safe(history.description)}</p></div><span class="sample-count">${history.sampleCount}<small>samples</small></span></header><svg viewBox="0 0 320 150" role="img" aria-label="${safe(history.description)}"><defs><linearGradient id="history-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--metric-color)" stop-opacity=".24"/><stop offset="1" stop-color="var(--metric-color)" stop-opacity="0"/></linearGradient></defs><path d="M20 125H304M20 90H304M20 55H304M20 20H304" stroke="#dbe6dd" stroke-dasharray="3"/>${area ? `<path d="${area}" fill="url(#history-fill)"/><path d="${chart.path}" fill="none" stroke="var(--metric-color)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><g fill="var(--surface)" stroke="var(--metric-color)" stroke-width="3">${circles}</g>` : ""}</svg>${history.values.length ? `<div class="chart-labels"><span>${safe(history.labels[0])}</span><span>${safe(history.labels[Math.floor(history.labels.length / 2)])}</span><span>${safe(history.labels.at(-1))}</span></div>` : `<div class="no-chart-data"><strong>No ${safe(history.title.toLowerCase())} data yet</strong><span>This sensor has no calibrated samples in the selected range.</span></div>`}</section>
+    <section class="history-stats" aria-label="${safe(history.title)} summary"><article><span>Current</span><strong>${safe(valueWithUnit(history.current))}</strong></article><article><span>Average</span><strong>${safe(valueWithUnit(history.average))}</strong></article><article><span>Range</span><strong>${safe(valueWithUnit(history.minimum))} – ${safe(valueWithUnit(history.maximum))}</strong></article></section>
+    <section class="recent-readings"><header><div><h2>Recent readings</h2><p>Newest valid samples in this range</p></div><span>${safe(history.unit || "Value")}</span></header>${recent ? `<ol>${recent}</ol>` : `<div class="empty-inline"><strong>No readings available</strong><span>Values will appear after the backend records valid measurements.</span></div>`}</section>
+    <section class="incident-timeline"><header><div><h2>Problem timeline</h2><p>Detected problems and recorded recoveries</p></div><span>${history.incidents.length} event${history.incidents.length === 1 ? "" : "s"}</span></header>${incidents ? `<ol>${incidents}</ol>` : `<div class="empty-inline"><strong>No problem transitions in this range</strong><span>Sensor, vision, fusion, and system incidents will appear when they are detected or resolved.</span></div>`}</section>`;
   app.innerHTML = renderShell(content, data);
   document.querySelectorAll("[data-history-range]").forEach((button) => button.addEventListener("click", () => {
     historyRange = HISTORY_RANGES.includes(button.dataset.historyRange) ? button.dataset.historyRange : "Today";
+    render();
+  }));
+  document.querySelectorAll("[data-history-metric]").forEach((button) => button.addEventListener("click", () => {
+    historyMetric = button.dataset.historyMetric;
     render();
   }));
   bindNav();
 }
 
 function relativeAlertTime(iso) {
-  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
-  if (!Number.isFinite(minutes) || minutes === 0) return "Just now";
+  const timestamp = new Date(iso).getTime();
+  if (!Number.isFinite(timestamp)) return "Time unavailable";
+  const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60_000));
+  if (minutes === 0) return "Just now";
+  if (minutes >= 1_440) return `${Math.floor(minutes / 1_440)}d ago`;
+  if (minutes >= 60) return `${Math.floor(minutes / 60)}h ago`;
   return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
 }
 
 function renderAlerts(data, alerts) {
-  const items = alerts.map((alert) => `<article class="alert-item ${["good", "warn", "danger"].includes(alert.tone) ? alert.tone : ""}"><span aria-hidden="true">${safe(alert.icon)}</span><div><h2>${safe(alert.title)}</h2><p>${safe(alert.message)}</p><time datetime="${safe(alert.createdAt)}">${safe(relativeAlertTime(alert.createdAt))}</time></div></article>`).join("");
-  const content = `<section class="page-title"><h2>Alerts</h2><p>${safe(sourceLabel(data))}</p></section><section class="alert-list">${items || '<article class="empty-list"><h2>No events</h2><p>The backend has not recorded any events yet.</p></article>'}</section>`;
+  const counts = {
+    Critical: alerts.filter((alert) => alert.tone === "danger").length,
+    Warnings: alerts.filter((alert) => alert.tone === "warn").length,
+    System: alerts.filter((alert) => !["danger", "warn"].includes(alert.tone)).length
+  };
+  const filtered = alerts.filter((alert) => alertFilter === "All"
+    || (alertFilter === "Critical" && alert.tone === "danger")
+    || (alertFilter === "Warnings" && alert.tone === "warn")
+    || (alertFilter === "System" && !["danger", "warn"].includes(alert.tone)));
+  const items = filtered.map((alert) => {
+    const tone = ["good", "warn", "danger"].includes(alert.tone) ? alert.tone : "info";
+    const label = tone === "danger" ? "Critical" : tone === "warn" ? "Warning" : tone === "good" ? "Resolved" : "System";
+    return `<article class="alert-item ${tone}"><span class="alert-symbol" aria-hidden="true">${safe(alert.icon)}</span><div class="alert-copy"><div class="alert-title-row"><h2>${safe(alert.title)}</h2><span class="severity ${tone}">${label}</span></div><p>${safe(alert.message)}</p><div class="alert-meta"><time datetime="${safe(alert.createdAt)}">${safe(relativeAlertTime(alert.createdAt))}</time><span aria-hidden="true">•</span><time datetime="${safe(alert.createdAt)}">${safe(niceTime(alert.createdAt))}</time></div></div></article>`;
+  }).join("");
+  const summary = `<section class="alert-summary" aria-label="Event summary"><article class="danger"><span>Critical</span><strong>${counts.Critical}</strong></article><article class="warn"><span>Warnings</span><strong>${counts.Warnings}</strong></article><article class="info"><span>System</span><strong>${counts.System}</strong></article></section>`;
+  const filters = `<div class="filter-row alert-filters" role="group" aria-label="Filter alerts">${ALERT_FILTERS.map((filter) => `<button type="button" data-alert-filter="${filter}" class="${filter === alertFilter ? "selected" : ""}" aria-pressed="${filter === alertFilter}">${filter}</button>`).join("")}</div>`;
+  const empty = `<article class="empty-list"><span aria-hidden="true">✓</span><div><h2>${alerts.length ? `No ${safe(alertFilter.toLowerCase())} events` : "No events recorded"}</h2><p>${alerts.length ? "Choose another filter to review the remaining system activity." : "New warnings, faults, recoveries, and system activity will appear here."}</p></div></article>`;
+  const content = `<section class="page-title page-title-split"><div><h2>Alerts & activity</h2><p>${safe(sourceLabel(data))}</p></div><span class="read-only-label">Read-only event log</span></section>${summary}${filters}<section class="alert-list" aria-live="polite">${items || empty}</section>`;
   app.innerHTML = renderShell(content, data);
+  document.querySelectorAll("[data-alert-filter]").forEach((button) => button.addEventListener("click", () => {
+    alertFilter = ALERT_FILTERS.includes(button.dataset.alertFilter) ? button.dataset.alertFilter : "All";
+    renderAlerts(data, alerts);
+  }));
   bindNav();
 }
 
@@ -260,7 +303,7 @@ async function render() {
   if (!lastSnapshot || renderedPage !== activePage) renderLoading();
   try {
     const requests = [api.getSnapshot()];
-    if (activePage === "History") requests.push(api.getHistory(historyRange));
+    if (activePage === "History") requests.push(api.getHistory(historyRange, historyMetric));
     if (activePage === "Alerts") requests.push(api.getAlerts());
     const [data, pageData] = await withTimeout(Promise.all(requests));
     if (sequence !== renderSequence) return;

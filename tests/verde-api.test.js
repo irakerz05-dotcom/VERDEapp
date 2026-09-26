@@ -35,9 +35,14 @@ test("alerts are supplied by the mock API with valid timestamps", async () => {
   const api = new MockVerdeApi({ delay: 0 });
   const alerts = await api.getAlerts();
 
-  assert.equal(alerts.length, 3);
+  assert.equal(alerts.length, 7);
   assert.ok(alerts.every((alert) => !Number.isNaN(Date.parse(alert.createdAt))));
   assert.ok(alerts.some((alert) => alert.tone === "good"));
+  assert.ok(alerts.some((alert) => alert.tone === "warn"));
+  assert.ok(alerts.some((alert) => alert.source === "vision"));
+  assert.ok(alerts.some((alert) => alert.source === "fusion"));
+  assert.ok(alerts.some((alert) => alert.source === "sensor"));
+  assert.ok(alerts.some((alert) => alert.issueKey === "vision:pest" && alert.tone === "warn"));
 });
 
 test("accepted mode changes persist in subsequent snapshots", async () => {
@@ -114,13 +119,35 @@ test("backend history filters ranges, orders samples, and keeps empty ranges hon
   assert.equal(normalizeBackendHistory([], "7 Days", now).current, "—");
 });
 
+test("history supports every sensor and selects an available metric without inventing data", () => {
+  const now = new Date("2026-09-25T12:00:00Z");
+  const rows = [
+    { timestamp: "2026-09-25T11:00:00Z", ph: null, water_temperature: 30.2, ambient_humidity: 82 },
+    { timestamp: "2026-09-25T11:05:00Z", ph: null, water_temperature: 30.3, ambient_humidity: 83 }
+  ];
+  const automatic = normalizeBackendHistory(rows, "Today", now);
+  const humidity = normalizeBackendHistory(rows, "Today", now, "ambient_humidity");
+
+  assert.equal(automatic.metricKey, "water_temperature");
+  assert.deepEqual(automatic.values, [30.2, 30.3]);
+  assert.equal(humidity.metricKey, "ambient_humidity");
+  assert.equal(humidity.current, 83);
+  assert.equal(humidity.metrics.find((metric) => metric.key === "ph").sampleCount, 0);
+});
+
 test("backend events are converted to safe alert presentation data", () => {
   const alerts = normalizeBackendEvents([
     { id: 1, timestamp: "2026-09-25T12:00:00Z", category: "warning", message: "Sensor unavailable" },
-    { id: 2, timestamp: "2026-09-25T11:00:00Z", category: "camera_error", message: "Capture failed" }
+    { id: 2, timestamp: "2026-09-25T11:00:00Z", category: "camera_error", message: "Capture failed" },
+    { id: 3, timestamp: "2026-09-25T10:00:00Z", category: "problem_opened", message: "Plant vision detected Wilting.", payload: JSON.stringify({ state: "OPEN", source: "vision", severity: "warning", issue_key: "vision:plant_condition" }) },
+    { id: 4, timestamp: "2026-09-25T10:30:00Z", category: "problem_resolved", message: "Resolved: Plant vision detected Wilting.", payload: JSON.stringify({ state: "RESOLVED", source: "vision", severity: "resolved", issue_key: "vision:plant_condition" }) }
   ]);
   assert.equal(alerts[0].tone, "warn");
   assert.equal(alerts[1].tone, "danger");
+  assert.equal(alerts[2].state, "OPEN");
+  assert.equal(alerts[2].title, "Vision problem");
+  assert.equal(alerts[3].tone, "good");
+  assert.equal(alerts[3].state, "RESOLVED");
 });
 
 test("real adapter uses same-origin routes, session token, and backend mode names", async () => {

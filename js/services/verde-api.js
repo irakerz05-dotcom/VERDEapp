@@ -1,56 +1,111 @@
 // Browser API boundary. Hardware access and safety decisions stay in the
 // Raspberry Pi backend; this module only translates its JSON into UI data.
 
+const HISTORY_METRICS = [
+  { key: "ph", label: "pH", unit: "", color: "#27813e" },
+  { key: "ec", label: "EC", unit: "mS/cm", color: "#0f766e" },
+  { key: "tds", label: "TDS", unit: "ppm", color: "#2563a8" },
+  { key: "water_temperature", label: "Water temperature", unit: "°C", color: "#d97706" },
+  { key: "turbidity", label: "Turbidity", unit: "NTU", color: "#7c3aed" },
+  { key: "ambient_humidity", label: "Humidity", unit: "% RH", color: "#0891b2" }
+];
+
 const HISTORY = {
   Today: {
     range: "Today",
-    title: "pH trend",
-    description: "Nutrient solution pH today",
-    values: [5.8, 5.9, 6.2, 6.1, 5.9, 5.9],
+    series: {
+      ph: [5.8, 5.9, 6.2, 6.1, 5.9, 5.9],
+      ec: [1.43, 1.47, 1.5, 1.48, 1.51, 1.5],
+      tds: [715, 735, 750, 740, 755, 750],
+      water_temperature: [21.8, 21.9, 22.2, 22.5, 22.3, 22.1],
+      turbidity: [3.4, 3.3, 3.2, 3.2, 3.1, 3.2],
+      ambient_humidity: [70, 71, 73, 74, 72, 72]
+    },
     labels: ["12 AM", "4 AM", "8 AM", "12 PM", "4 PM", "Now"]
   },
   "24 Hours": {
     range: "24 Hours",
-    title: "pH trend",
-    description: "Nutrient solution pH over 24 hours",
-    values: [5.7, 5.8, 6.0, 6.2, 6.1, 5.9, 5.8, 5.9],
+    series: {
+      ph: [5.7, 5.8, 6.0, 6.2, 6.1, 5.9, 5.8, 5.9],
+      ec: [1.41, 1.44, 1.47, 1.5, 1.49, 1.48, 1.51, 1.5],
+      tds: [705, 720, 735, 750, 745, 740, 755, 750],
+      water_temperature: [21.5, 21.6, 21.9, 22.3, 22.6, 22.4, 22.2, 22.1],
+      turbidity: [3.5, 3.4, 3.3, 3.2, 3.2, 3.1, 3.2, 3.2],
+      ambient_humidity: [69, 70, 71, 73, 74, 73, 72, 72]
+    },
     labels: ["24h ago", "20h", "16h", "12h", "8h", "4h", "2h", "Now"]
   },
   "7 Days": {
     range: "7 Days",
-    title: "pH trend",
-    description: "Available daily pH samples from the last 7 days",
-    values: [6.0, 5.8, 5.9, 6.1, 6.0, 5.9, 5.9],
+    series: {
+      ph: [6.0, 5.8, 5.9, 6.1, 6.0, 5.9, 5.9],
+      ec: [1.46, 1.43, 1.47, 1.52, 1.49, 1.51, 1.5],
+      tds: [730, 715, 735, 760, 745, 755, 750],
+      water_temperature: [22.4, 22.1, 21.9, 22.5, 22.2, 22.3, 22.1],
+      turbidity: [3.5, 3.4, 3.3, 3.2, 3.2, 3.1, 3.2],
+      ambient_humidity: [71, 70, 72, 74, 73, 72, 72]
+    },
     labels: ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Today"]
   }
 };
 
-const ALERT_TEMPLATES = [
+const MOCK_EVENT_TEMPLATES = [
   {
-    id: "system-clear",
-    tone: "good",
-    icon: "✓",
-    title: "No active critical alerts",
-    message: "All monitored mock systems are currently within their configured ranges.",
-    minutesAgo: 0
+    id: "mock-cycle",
+    minutesAgo: 0,
+    category: "system",
+    message: "Mock monitoring cycle completed. These entries demonstrate the incident log without claiming live hardware results."
   },
   {
-    id: "plant-check",
-    tone: "info",
-    icon: "◉",
-    title: "Plant check completed",
-    message: "Healthy condition and no pest presence detected.",
-    minutesAgo: 2
+    id: "mock-sensor-resolved",
+    minutesAgo: 3,
+    category: "problem_resolved",
+    message: "Resolved: Ambient humidity returned to the configured range.",
+    payload: { state: "RESOLVED", source: "sensor", severity: "resolved", issue_key: "sensor:ambient_humidity:range" }
   },
   {
-    id: "water-quality",
-    tone: "info",
-    icon: "◈",
-    title: "Water quality optimal",
-    message: "All four water-classifier inputs are within range.",
-    minutesAgo: 5
+    id: "mock-fusion-resolved",
+    minutesAgo: 8,
+    category: "problem_resolved",
+    message: "Resolved: Sensor and plant-vision results are consistent again.",
+    payload: { state: "RESOLVED", source: "fusion", severity: "resolved", issue_key: "fusion:low_confidence" }
+  },
+  {
+    id: "mock-vision-resolved",
+    minutesAgo: 12,
+    category: "problem_resolved",
+    message: "Resolved: Follow-up plant images no longer show possible pest presence.",
+    payload: { state: "RESOLVED", source: "vision", severity: "resolved", issue_key: "vision:pest" }
+  },
+  {
+    id: "mock-sensor-opened",
+    minutesAgo: 18,
+    category: "problem_opened",
+    message: "Ambient humidity was outside the configured range.",
+    payload: { state: "OPEN", source: "sensor", severity: "warning", issue_key: "sensor:ambient_humidity:range" }
+  },
+  {
+    id: "mock-fusion-opened",
+    minutesAgo: 24,
+    category: "problem_opened",
+    message: "Sensor and plant-vision results disagreed, producing low fusion confidence.",
+    payload: { state: "OPEN", source: "fusion", severity: "warning", issue_key: "fusion:low_confidence" }
+  },
+  {
+    id: "mock-vision-opened",
+    minutesAgo: 31,
+    category: "problem_opened",
+    message: "Plant vision detected possible pest presence; farmer inspection recommended.",
+    payload: { state: "OPEN", source: "vision", severity: "warning", issue_key: "vision:pest" }
   }
 ];
+
+function mockEventRows(now = Date.now()) {
+  return MOCK_EVENT_TEMPLATES.map(({ minutesAgo, ...event }) => ({
+    ...event,
+    timestamp: new Date(now - minutesAgo * 60_000).toISOString()
+  }));
+}
 
 const SENSOR_PRESENTATION = {
   ph: { label: "pH", icon: "◈" },
@@ -157,42 +212,96 @@ export function normalizeBackendSnapshot(state) {
   };
 }
 
-export function normalizeBackendHistory(rows, range = "Today", now = new Date()) {
-  const selectedRange = ["Today", "24 Hours", "7 Days"].includes(range) ? range : "Today";
-  const start = historyStart(selectedRange, now);
-  const samples = (Array.isArray(rows) ? rows : [])
-    .map((row) => ({ timestamp: row.timestamp, value: finiteNumber(row.ph) }))
-    .filter((row) => row.value !== null && Number.isFinite(Date.parse(row.timestamp)) && Date.parse(row.timestamp) >= start)
-    .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
+function summarizeHistoryMetric(metric, samples) {
   const values = samples.map((sample) => sample.value);
-  const description = {
-    Today: "Available nutrient solution pH samples today",
-    "24 Hours": "Available nutrient solution pH samples over 24 hours",
-    "7 Days": "Available nutrient solution pH samples over 7 days"
-  }[selectedRange];
-
   return {
-    range: selectedRange,
-    title: "pH trend",
-    description,
+    ...metric,
     values,
-    labels: samples.length ? samples.map((sample) => historyLabel(sample.timestamp, selectedRange)) : ["No data"],
+    samples,
+    sampleCount: values.length,
     current: values.length ? values.at(-1) : "—",
+    minimum: values.length ? Math.min(...values) : "—",
     maximum: values.length ? Math.max(...values) : "—",
     average: values.length ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)) : "—"
   };
 }
 
+function historyDescription(metric, range) {
+  const period = range === "Today" ? "today" : range === "24 Hours" ? "over the last 24 hours" : "over the last 7 days";
+  return `${metric.label} samples ${period}`;
+}
+
+function historyView(range, metrics, selectedMetric, incidents = []) {
+  const requested = metrics.find((metric) => metric.key === selectedMetric);
+  const selected = requested ?? metrics.find((metric) => metric.sampleCount) ?? metrics[0];
+  return {
+    range,
+    metrics: metrics.map(({ key, label, unit, color, sampleCount }) => ({ key, label, unit, color, sampleCount })),
+    metricKey: selected.key,
+    title: `${selected.label} trend`,
+    description: historyDescription(selected, range),
+    unit: selected.unit,
+    color: selected.color,
+    values: selected.values,
+    labels: selected.samples.length ? selected.samples.map((sample) => sample.label) : ["No data"],
+    samples: selected.samples,
+    sampleCount: selected.sampleCount,
+    current: selected.current,
+    minimum: selected.minimum,
+    maximum: selected.maximum,
+    average: selected.average,
+    incidents
+  };
+}
+
+export function normalizeBackendHistory(rows, range = "Today", now = new Date(), selectedMetric = null, eventRows = []) {
+  const selectedRange = ["Today", "24 Hours", "7 Days"].includes(range) ? range : "Today";
+  const start = historyStart(selectedRange, now);
+  const validRows = (Array.isArray(rows) ? rows : [])
+    .filter((row) => Number.isFinite(Date.parse(row?.timestamp)) && Date.parse(row.timestamp) >= start)
+    .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
+  const metrics = HISTORY_METRICS.map((metric) => summarizeHistoryMetric(metric, validRows
+    .map((row) => ({ timestamp: row.timestamp, label: historyLabel(row.timestamp, selectedRange), value: finiteNumber(row[metric.key]) }))
+    .filter((sample) => sample.value !== null)));
+  const incidents = normalizeBackendEvents(eventRows).filter((event) =>
+    (event.state === "OPEN" || event.state === "RESOLVED")
+    && Number.isFinite(Date.parse(event.createdAt))
+    && Date.parse(event.createdAt) >= start);
+  return historyView(selectedRange, metrics, selectedMetric, incidents);
+}
+
+function eventPayload(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value ?? "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export function normalizeBackendEvents(rows) {
   return (Array.isArray(rows) ? rows : []).map((row) => {
     const category = String(row.category ?? "event");
-    const danger = /error|fault|critical/i.test(`${category} ${row.message ?? ""}`);
-    const warning = category === "warning" || /warning|pending|unavailable/i.test(String(row.message ?? ""));
+    const payload = eventPayload(row.payload);
+    const state = payload.state ?? (category === "problem_resolved" ? "RESOLVED" : category === "problem_opened" ? "OPEN" : null);
+    const source = String(payload.source ?? category).replaceAll("_", " ");
+    const danger = payload.severity === "critical" || /error|fault|critical/i.test(`${category} ${row.message ?? ""}`);
+    const warning = payload.severity === "warning" || category === "warning" || /warning|pending|unavailable/i.test(String(row.message ?? ""));
+    const resolved = state === "RESOLVED";
+    const tone = resolved ? "good" : danger ? "danger" : warning ? "warn" : "info";
+    const title = state
+      ? `${source.replace(/\b\w/g, (letter) => letter.toUpperCase())} ${resolved ? "recovered" : "problem"}`
+      : category.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
     return {
       id: `event-${row.id ?? `${row.timestamp}-${category}`}`,
-      tone: danger ? "danger" : warning ? "warn" : "info",
-      icon: danger ? "!" : warning ? "△" : "◉",
-      title: category.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+      category,
+      state,
+      source,
+      issueKey: payload.issue_key ?? null,
+      tone,
+      icon: resolved ? "✓" : danger ? "!" : warning ? "△" : "◉",
+      title,
       message: row.message ?? "Backend event",
       createdAt: row.timestamp
     };
@@ -227,9 +336,12 @@ export class VerdeApi {
     return normalizeBackendSnapshot(await this.request("/api/status"));
   }
 
-  async getHistory(range = "Today") {
-    const payload = await this.request("/api/history");
-    return normalizeBackendHistory(payload?.rows, range);
+  async getHistory(range = "Today", selectedMetric = null) {
+    const [historyPayload, eventPayload] = await Promise.all([
+      this.request("/api/history"),
+      this.request("/api/events")
+    ]);
+    return normalizeBackendHistory(historyPayload?.rows, range, new Date(), selectedMetric, eventPayload?.rows);
   }
 
   async getAlerts() {
@@ -335,23 +447,20 @@ export class MockVerdeApi {
     });
   }
 
-  async getHistory(range = "Today") {
+  async getHistory(range = "Today", selectedMetric = null) {
     const selected = HISTORY[range] ?? HISTORY.Today;
-    const values = selected.values;
-    return this.respond({
-      ...selected,
-      current: values.at(-1),
-      maximum: Math.max(...values),
-      average: Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2))
-    });
+    const metrics = HISTORY_METRICS.map((metric) => summarizeHistoryMetric(metric,
+      selected.series[metric.key].map((value, index) => ({
+        timestamp: new Date(Date.now() - (selected.labels.length - 1 - index) * 60 * 60 * 1_000).toISOString(),
+        label: selected.labels[index],
+        value
+      }))));
+    const incidents = normalizeBackendEvents(mockEventRows()).filter((event) => event.state);
+    return this.respond(historyView(selected.range, metrics, selectedMetric, incidents));
   }
 
   async getAlerts() {
-    const now = Date.now();
-    return this.respond(ALERT_TEMPLATES.map(({ minutesAgo, ...alert }) => ({
-      ...alert,
-      createdAt: new Date(now - minutesAgo * 60_000).toISOString()
-    })));
+    return this.respond(normalizeBackendEvents(mockEventRows()));
   }
 
   async requestModeChange(mode) {

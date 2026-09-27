@@ -86,7 +86,12 @@ const backendState = {
     override: true,
     override_reason: "Required water sensor unavailable/faulty, critical water condition, or system fault."
   },
-  alerts: ["AI results unavailable"]
+  alerts: ["AI results unavailable"],
+  incidents: [{
+    issue_key: "vision:pest", source: "vision", severity: "warning",
+    message: "Possible pest presence; farmer inspection recommended.", state: "OPEN",
+    opened_at: "2026-09-25T03:58:00+00:00", acknowledged_at: null
+  }]
 };
 
 test("backend status is normalized without inventing unavailable readings or AI results", () => {
@@ -102,6 +107,8 @@ test("backend status is normalized without inventing unavailable readings or AI 
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Ambient Humidity").value, "77");
   assert.equal(snapshot.plant.pestDetected, null);
   assert.equal(snapshot.plant.frameUrl, "/api/camera/frame?v=4");
+  assert.equal(snapshot.incidents[0].issueKey, "vision:pest");
+  assert.equal(snapshot.incidents[0].state, "OPEN");
 });
 
 test("backend history filters ranges, orders samples, and keeps empty ranges honest", () => {
@@ -140,7 +147,8 @@ test("backend events are converted to safe alert presentation data", () => {
     { id: 1, timestamp: "2026-09-25T12:00:00Z", category: "warning", message: "Sensor unavailable" },
     { id: 2, timestamp: "2026-09-25T11:00:00Z", category: "camera_error", message: "Capture failed" },
     { id: 3, timestamp: "2026-09-25T10:00:00Z", category: "problem_opened", message: "Plant vision detected Wilting.", payload: JSON.stringify({ state: "OPEN", source: "vision", severity: "warning", issue_key: "vision:plant_condition" }) },
-    { id: 4, timestamp: "2026-09-25T10:30:00Z", category: "problem_resolved", message: "Resolved: Plant vision detected Wilting.", payload: JSON.stringify({ state: "RESOLVED", source: "vision", severity: "resolved", issue_key: "vision:plant_condition" }) }
+    { id: 4, timestamp: "2026-09-25T10:30:00Z", category: "problem_resolved", message: "Resolved: Plant vision detected Wilting.", payload: JSON.stringify({ state: "RESOLVED", source: "vision", severity: "resolved", issue_key: "vision:plant_condition" }) },
+    { id: 5, timestamp: "2026-09-25T10:15:00Z", category: "problem_acknowledged", message: "Acknowledged: Plant vision detected Wilting.", payload: JSON.stringify({ state: "ACKNOWLEDGED", source: "vision", severity: "warning", issue_key: "vision:plant_condition" }) }
   ]);
   assert.equal(alerts[0].tone, "warn");
   assert.equal(alerts[1].tone, "danger");
@@ -148,6 +156,8 @@ test("backend events are converted to safe alert presentation data", () => {
   assert.equal(alerts[2].title, "Vision problem");
   assert.equal(alerts[3].tone, "good");
   assert.equal(alerts[3].state, "RESOLVED");
+  assert.equal(alerts[4].state, "ACKNOWLEDGED");
+  assert.equal(alerts[4].title, "Vision acknowledged");
 });
 
 test("real adapter uses same-origin routes, session token, and backend mode names", async () => {
@@ -160,10 +170,13 @@ test("real adapter uses same-origin routes, session token, and backend mode name
   const api = new VerdeApi({ fetchImpl });
   const snapshot = await api.getSnapshot();
   const result = await api.requestModeChange("Full Automation");
+  const acknowledged = await api.acknowledgeIssue("vision:pest");
 
   assert.equal(snapshot.settings.backendConnected, true);
   assert.equal(result.activeMode, "Semi-Automation");
-  assert.deepEqual(calls.map((call) => call.url), ["/api/status", "/api/session", "/api/mode"]);
+  assert.equal(acknowledged.system_status, backendState.system_status);
+  assert.deepEqual(calls.map((call) => call.url), ["/api/status", "/api/session", "/api/mode", "/api/incidents/acknowledge"]);
   assert.equal(calls[2].options.headers["X-VERDE-Token"], "test-token");
   assert.deepEqual(JSON.parse(calls[2].options.body), { mode: "Full Automation Mode" });
+  assert.deepEqual(JSON.parse(calls[3].options.body), { issue_key: "vision:pest" });
 });

@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=14";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=14";
+import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=15";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=15";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -15,7 +15,7 @@ const api = usingMock
 const app = document.querySelector("#app");
 const API_TIMEOUT_MS = 4_000;
 const HISTORY_RANGES = ["Today", "24 Hours", "7 Days"];
-const ALERT_FILTERS = ["All", "Critical", "Warnings", "System"];
+const ALERT_FILTERS = ["All", "Active", "Acknowledged", "Resolved", "System"];
 let activePage = pageFromHash();
 let historyRange = "Today";
 let historyMetric = null;
@@ -71,13 +71,13 @@ function renderHeader(data) {
 
 function renderConnectionBanner(data) {
   if (data?.stale) {
-    return `<aside class="connection-banner offline-banner" role="status"><b>Stale data</b><span>${safe(data.staleReason || "The backend is unavailable. Values may no longer be current.")}</span></aside>`;
+    return `<aside class="connection-banner offline-banner" role="status"><div><b>Stale data</b><span>${safe(data.staleReason || "The backend is unavailable. Values may no longer be current.")}</span></div><button type="button" data-retry-connection>Try now</button></aside>`;
   }
   if (!navigator.onLine) {
-    return `<aside class="connection-banner offline-banner" role="status"><b>Offline</b><span>${data?.isMock ? "Showing mock development data." : "Showing the last successful response when available."}</span></aside>`;
+    return `<aside class="connection-banner offline-banner" role="status"><div><b>Offline</b><span>${data?.isMock ? "Showing mock development data." : "Showing the last successful response when available."}</span></div><button type="button" data-retry-connection>Retry</button></aside>`;
   }
   if (!data.online) {
-    return `<aside class="connection-banner offline-banner" role="status"><b>${data?.isMock ? "Mock adapter offline" : "Backend unavailable"}</b><span>${data?.isMock ? "Data is available for interface testing only." : "Live readings could not be refreshed."}</span></aside>`;
+    return `<aside class="connection-banner offline-banner" role="status"><div><b>${data?.isMock ? "Mock adapter offline" : "Backend unavailable"}</b><span>${data?.isMock ? "Data is available for interface testing only." : "Live readings could not be refreshed."}</span></div><button type="button" data-retry-connection>Retry</button></aside>`;
   }
   return "";
 }
@@ -115,6 +115,7 @@ function bindNav() {
       window.location.hash = nextHash;
     }
   }));
+  document.querySelector("[data-retry-connection]")?.addEventListener("click", () => render());
 }
 
 function showToast(message, tone = "good") {
@@ -252,7 +253,8 @@ function renderHistory(data, history) {
   const valueWithUnit = (value) => value === "—" ? value : `${value}${unit}`;
   const metricButtons = history.metrics.map((metric) => `<button type="button" data-history-metric="${safe(metric.key)}" class="metric-chip ${metric.key === history.metricKey ? "selected" : ""}" aria-pressed="${metric.key === history.metricKey}"><span>${safe(metric.label)}</span><small>${metric.sampleCount} sample${metric.sampleCount === 1 ? "" : "s"}</small></button>`).join("");
   const recent = history.samples.slice(-6).reverse().map((sample) => `<li><time datetime="${safe(sample.timestamp)}">${safe(sample.label)}</time><strong>${safe(valueWithUnit(sample.value))}</strong></li>`).join("");
-  const incidents = history.incidents.map((incident) => `<li class="incident-item ${incident.tone}"><span class="incident-marker" aria-hidden="true">${incident.state === "RESOLVED" ? "✓" : "!"}</span><div><div class="incident-title-row"><strong>${safe(incident.title)}</strong><span>${incident.state === "RESOLVED" ? "Resolved" : "Problem detected"}</span></div><p>${safe(incident.message)}</p><time datetime="${safe(incident.createdAt)}">${safe(niceTime(incident.createdAt))} · ${safe(relativeAlertTime(incident.createdAt))}</time></div></li>`).join("");
+  const incidentState = (incident) => incident.state === "RESOLVED" ? "Resolved" : incident.state === "ACKNOWLEDGED" ? "Acknowledged" : "Problem detected";
+  const incidents = history.incidents.map((incident) => `<li class="incident-item ${incident.tone}"><span class="incident-marker" aria-hidden="true">${incident.state === "RESOLVED" ? "✓" : incident.state === "ACKNOWLEDGED" ? "◎" : "!"}</span><div><div class="incident-title-row"><strong>${safe(incident.title)}</strong><span>${incidentState(incident)}</span></div><p>${safe(incident.message)}</p><time datetime="${safe(incident.createdAt)}">${safe(niceTime(incident.createdAt))} · ${safe(relativeAlertTime(incident.createdAt))}</time></div></li>`).join("");
   const content = `<section class="page-title"><h2>History</h2><p>${safe(sourceLabel(data))}</p></section>
     <div class="filter-row" role="group" aria-label="History range">${HISTORY_RANGES.map((range) => `<button type="button" data-history-range="${range}" class="${range === history.range ? "selected" : ""}" aria-pressed="${range === history.range}">${range}</button>`).join("")}</div>
     <section class="metric-picker" aria-label="Sensor history metric">${metricButtons}</section>
@@ -283,28 +285,63 @@ function relativeAlertTime(iso) {
 }
 
 function renderAlerts(data, alerts) {
+  const activeIncidents = new Map((data.incidents || []).map((incident) => [incident.issueKey, incident]));
+  const loggedIssueKeys = new Set(alerts.map((alert) => alert.issueKey).filter(Boolean));
+  const currentOnly = (data.incidents || []).filter((incident) => !loggedIssueKeys.has(incident.issueKey)).map((incident) => ({
+    id: `current-${incident.issueKey}`,
+    category: "current_incident",
+    state: incident.state,
+    source: incident.source,
+    issueKey: incident.issueKey,
+    tone: incident.severity === "critical" ? "danger" : "warn",
+    icon: incident.state === "ACKNOWLEDGED" ? "◎" : incident.severity === "critical" ? "!" : "△",
+    title: `${incident.source.replace(/\b\w/g, (letter) => letter.toUpperCase())} ${incident.state === "ACKNOWLEDGED" ? "acknowledged" : "problem"}`,
+    message: incident.message,
+    createdAt: incident.acknowledgedAt || incident.openedAt || data.updatedAt
+  }));
+  const alertRows = [...currentOnly, ...alerts];
   const counts = {
-    Critical: alerts.filter((alert) => alert.tone === "danger").length,
-    Warnings: alerts.filter((alert) => alert.tone === "warn").length,
-    System: alerts.filter((alert) => !["danger", "warn"].includes(alert.tone)).length
+    Active: (data.incidents || []).filter((incident) => incident.state === "OPEN").length,
+    Acknowledged: (data.incidents || []).filter((incident) => incident.state === "ACKNOWLEDGED").length,
+    Resolved: alertRows.filter((alert) => alert.state === "RESOLVED").length
   };
-  const filtered = alerts.filter((alert) => alertFilter === "All"
-    || (alertFilter === "Critical" && alert.tone === "danger")
-    || (alertFilter === "Warnings" && alert.tone === "warn")
-    || (alertFilter === "System" && !["danger", "warn"].includes(alert.tone)));
+  const filtered = alertRows.filter((alert) => alertFilter === "All"
+    || (alertFilter === "Active" && alert.state === "OPEN" && activeIncidents.get(alert.issueKey)?.state === "OPEN")
+    || (alertFilter === "Acknowledged" && alert.state === "ACKNOWLEDGED")
+    || (alertFilter === "Resolved" && alert.state === "RESOLVED")
+    || (alertFilter === "System" && !alert.state));
   const items = filtered.map((alert) => {
     const tone = ["good", "warn", "danger"].includes(alert.tone) ? alert.tone : "info";
     const label = tone === "danger" ? "Critical" : tone === "warn" ? "Warning" : tone === "good" ? "Resolved" : "System";
-    return `<article class="alert-item ${tone}"><span class="alert-symbol" aria-hidden="true">${safe(alert.icon)}</span><div class="alert-copy"><div class="alert-title-row"><h2>${safe(alert.title)}</h2><span class="severity ${tone}">${label}</span></div><p>${safe(alert.message)}</p><div class="alert-meta"><time datetime="${safe(alert.createdAt)}">${safe(relativeAlertTime(alert.createdAt))}</time><span aria-hidden="true">•</span><time datetime="${safe(alert.createdAt)}">${safe(niceTime(alert.createdAt))}</time></div></div></article>`;
+    const active = alert.issueKey ? activeIncidents.get(alert.issueKey) : null;
+    const canAcknowledge = alert.state === "OPEN" && active?.state === "OPEN";
+    return `<article class="alert-item ${tone}"><span class="alert-symbol" aria-hidden="true">${safe(alert.icon)}</span><div class="alert-copy"><div class="alert-title-row"><h2>${safe(alert.title)}</h2><span class="severity ${tone}">${label}</span></div><p>${safe(alert.message)}</p><div class="alert-meta"><time datetime="${safe(alert.createdAt)}">${safe(relativeAlertTime(alert.createdAt))}</time><span aria-hidden="true">•</span><time datetime="${safe(alert.createdAt)}">${safe(niceTime(alert.createdAt))}</time></div>${canAcknowledge ? `<button type="button" class="acknowledge-button" data-acknowledge-issue="${safe(alert.issueKey)}">Acknowledge</button>` : ""}</div></article>`;
   }).join("");
-  const summary = `<section class="alert-summary" aria-label="Event summary"><article class="danger"><span>Critical</span><strong>${counts.Critical}</strong></article><article class="warn"><span>Warnings</span><strong>${counts.Warnings}</strong></article><article class="info"><span>System</span><strong>${counts.System}</strong></article></section>`;
+  const summary = `<section class="alert-summary" aria-label="Incident summary"><article class="danger"><span>Active</span><strong>${counts.Active}</strong></article><article class="warn"><span>Acknowledged</span><strong>${counts.Acknowledged}</strong></article><article class="good"><span>Resolved log</span><strong>${counts.Resolved}</strong></article></section>`;
   const filters = `<div class="filter-row alert-filters" role="group" aria-label="Filter alerts">${ALERT_FILTERS.map((filter) => `<button type="button" data-alert-filter="${filter}" class="${filter === alertFilter ? "selected" : ""}" aria-pressed="${filter === alertFilter}">${filter}</button>`).join("")}</div>`;
-  const empty = `<article class="empty-list"><span aria-hidden="true">✓</span><div><h2>${alerts.length ? `No ${safe(alertFilter.toLowerCase())} events` : "No events recorded"}</h2><p>${alerts.length ? "Choose another filter to review the remaining system activity." : "New warnings, faults, recoveries, and system activity will appear here."}</p></div></article>`;
-  const content = `<section class="page-title page-title-split"><div><h2>Alerts & activity</h2><p>${safe(sourceLabel(data))}</p></div><span class="read-only-label">Read-only event log</span></section>${summary}${filters}<section class="alert-list" aria-live="polite">${items || empty}</section>`;
+  const empty = `<article class="empty-list"><span aria-hidden="true">✓</span><div><h2>${alertRows.length ? `No ${safe(alertFilter.toLowerCase())} events` : "No events recorded"}</h2><p>${alertRows.length ? "Choose another filter to review the remaining system activity." : "New warnings, faults, recoveries, and system activity will appear here."}</p></div></article>`;
+  const content = `<section class="page-title page-title-split"><div><h2>Alerts & activity</h2><p>${safe(sourceLabel(data))}</p></div><span class="read-only-label">Incident audit trail</span></section>${summary}${filters}<section class="alert-list" aria-live="polite">${items || empty}</section>`;
   app.innerHTML = renderShell(content, data);
   document.querySelectorAll("[data-alert-filter]").forEach((button) => button.addEventListener("click", () => {
     alertFilter = ALERT_FILTERS.includes(button.dataset.alertFilter) ? button.dataset.alertFilter : "All";
     renderAlerts(data, alerts);
+  }));
+  document.querySelectorAll("[data-acknowledge-issue]").forEach((button) => button.addEventListener("click", () => {
+    showModal({
+      title: "Acknowledge this incident?",
+      text: "This records that the farmer has seen the warning. It does not mark the problem resolved and does not operate pumps, relays, or pesticides.",
+      confirmText: "Acknowledge",
+      onConfirm: async () => {
+        button.disabled = true;
+        try {
+          await withTimeout(api.acknowledgeIssue(button.dataset.acknowledgeIssue));
+          showToast("Incident acknowledged. It will remain active until the condition recovers.");
+          await render();
+        } catch (error) {
+          showToast(error?.message || "The incident could not be acknowledged.", "danger");
+        }
+      }
+    });
   }));
   bindNav();
 }
@@ -346,8 +383,12 @@ async function render() {
     const requests = [api.getSnapshot()];
     if (activePage === "History") requests.push(api.getHistory(historyRange, historyMetric));
     if (activePage === "Alerts") requests.push(api.getAlerts());
-    const [data, pageData] = await withTimeout(Promise.all(requests));
+    let [data, pageData] = await withTimeout(Promise.all(requests));
     if (sequence !== renderSequence) return;
+    const age = Date.now() - Date.parse(data.updatedAt);
+    if (!data.isMock && Number.isFinite(age) && age > 20_000) {
+      data = { ...data, online: false, stale: true, staleReason: `The last backend sample is ${Math.max(1, Math.floor(age / 1_000))} seconds old.` };
+    }
     lastSnapshot = data;
     if (pageData !== undefined) lastPageData.set(activePage, pageData);
 
@@ -379,8 +420,9 @@ window.addEventListener("hashchange", () => {
   activePage = pageFromHash();
   render();
 });
-window.addEventListener("online", render);
+window.addEventListener("online", () => { showToast("Network connection restored. Refreshing live data."); render(); });
 window.addEventListener("offline", render);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   deferredInstallPrompt = event;

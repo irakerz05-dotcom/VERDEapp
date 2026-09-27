@@ -89,6 +89,13 @@ connection cannot present old readings as live. Frontend releases show an
 update-ready message and take effect after the installed app is closed and
 reopened.
 
+The Alerts page distinguishes active, acknowledged and resolved incidents.
+Acknowledging an incident records that the farmer has seen it; it does not
+resolve the underlying condition, enable automation or operate any hardware.
+History includes the detected, acknowledged and recovered transitions as an
+audit timeline. Stale samples and failed refreshes remain visibly marked and
+provide a manual retry action.
+
 ## Raspberry Pi integration
 
 `js/services/verde-api.js` contains both the live `VerdeApi` adapter and the

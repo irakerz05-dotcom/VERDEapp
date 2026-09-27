@@ -204,6 +204,15 @@ export function normalizeBackendSnapshot(state) {
       reason: fusion.detail || fusion.status || "Fusion output is unavailable."
     },
     alerts: Array.isArray(state.alerts) ? state.alerts : [],
+    incidents: (Array.isArray(state.incidents) ? state.incidents : []).map((incident) => ({
+      issueKey: incident.issue_key ?? null,
+      source: incident.source ?? "system",
+      severity: incident.severity ?? "warning",
+      message: incident.message ?? "Active incident",
+      state: incident.state ?? "OPEN",
+      openedAt: incident.opened_at ?? null,
+      acknowledgedAt: incident.acknowledged_at ?? null
+    })),
     settings: {
       backendConnected: true,
       backendLabel: "Connected locally",
@@ -284,14 +293,18 @@ export function normalizeBackendEvents(rows) {
   return (Array.isArray(rows) ? rows : []).map((row) => {
     const category = String(row.category ?? "event");
     const payload = eventPayload(row.payload);
-    const state = payload.state ?? (category === "problem_resolved" ? "RESOLVED" : category === "problem_opened" ? "OPEN" : null);
+    const state = payload.state
+      ?? (category === "problem_resolved" ? "RESOLVED"
+        : category === "problem_acknowledged" ? "ACKNOWLEDGED"
+          : category === "problem_opened" ? "OPEN" : null);
     const source = String(payload.source ?? category).replaceAll("_", " ");
     const danger = payload.severity === "critical" || /error|fault|critical/i.test(`${category} ${row.message ?? ""}`);
     const warning = payload.severity === "warning" || category === "warning" || /warning|pending|unavailable/i.test(String(row.message ?? ""));
     const resolved = state === "RESOLVED";
-    const tone = resolved ? "good" : danger ? "danger" : warning ? "warn" : "info";
+    const acknowledged = state === "ACKNOWLEDGED";
+    const tone = resolved ? "good" : danger ? "danger" : warning || acknowledged ? "warn" : "info";
     const title = state
-      ? `${source.replace(/\b\w/g, (letter) => letter.toUpperCase())} ${resolved ? "recovered" : "problem"}`
+      ? `${source.replace(/\b\w/g, (letter) => letter.toUpperCase())} ${resolved ? "recovered" : acknowledged ? "acknowledged" : "problem"}`
       : category.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
     return {
       id: `event-${row.id ?? `${row.timestamp}-${category}`}`,
@@ -300,7 +313,7 @@ export function normalizeBackendEvents(rows) {
       source,
       issueKey: payload.issue_key ?? null,
       tone,
-      icon: resolved ? "✓" : danger ? "!" : warning ? "△" : "◉",
+      icon: resolved ? "✓" : acknowledged ? "◎" : danger ? "!" : warning ? "△" : "◉",
       title,
       message: row.message ?? "Backend event",
       createdAt: row.timestamp
@@ -386,6 +399,25 @@ export class VerdeApi {
         ? `${normalized.requestedMode} was requested, but the safety override keeps ${normalized.mode} active.`
         : `Operating mode changed to ${normalized.mode}. Physical outputs remain disabled.`
     };
+  }
+
+  async acknowledgeIssue(issueKey) {
+    if (typeof issueKey !== "string" || !issueKey) throw new Error("A valid incident is required.");
+    const post = async (refreshToken = false) => this.request("/api/incidents/acknowledge", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-VERDE-Token": await this.sessionToken(refreshToken)
+      },
+      body: JSON.stringify({ issue_key: issueKey })
+    });
+    try {
+      return await post(false);
+    } catch (error) {
+      if (error.status !== 403) throw error;
+      this.token = null;
+      return post(true);
+    }
   }
 }
 
@@ -473,5 +505,10 @@ export class MockVerdeApi {
       activeMode: mode,
       message: `Mock mode changed to ${mode}. The live backend will validate real requests.`
     };
+  }
+
+  async acknowledgeIssue(issueKey) {
+    if (typeof issueKey !== "string" || !issueKey) throw new Error("A valid incident is required.");
+    return this.respond({ issueKey, state: "ACKNOWLEDGED" });
   }
 }

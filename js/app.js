@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=15";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=15";
+import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=17";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=17";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;

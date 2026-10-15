@@ -4,10 +4,9 @@
 const HISTORY_METRICS = [
   { key: "ph", label: "pH", unit: "", color: "#27813e" },
   { key: "ec", label: "EC", unit: "mS/cm", color: "#0f766e" },
-  { key: "tds", label: "TDS", unit: "ppm", color: "#2563a8" },
-  { key: "water_temperature", label: "Water temperature", unit: "°C", color: "#d97706" },
   { key: "turbidity", label: "Turbidity", unit: "NTU", color: "#7c3aed" },
-  { key: "ambient_humidity", label: "Humidity", unit: "% RH", color: "#0891b2" }
+  { key: "water_temperature", label: "Water temperature", unit: "°C", color: "#d97706" },
+  { key: "ambient_humidity", label: "Humidity", unit: "%", color: "#2563a8" }
 ];
 
 const HISTORY = {
@@ -16,10 +15,9 @@ const HISTORY = {
     series: {
       ph: [5.8, 5.9, 6.2, 6.1, 5.9, 5.9],
       ec: [1.43, 1.47, 1.5, 1.48, 1.51, 1.5],
-      tds: [715, 735, 750, 740, 755, 750],
       water_temperature: [21.8, 21.9, 22.2, 22.5, 22.3, 22.1],
-      turbidity: [3.4, 3.3, 3.2, 3.2, 3.1, 3.2],
-      ambient_humidity: [70, 71, 73, 74, 72, 72]
+      turbidity: [1.02, 1.01, 1.0, 1.03, 1.01, 1.0],
+      ambient_humidity: [62, 63, 64, 63, 62, 62]
     },
     labels: ["12 AM", "4 AM", "8 AM", "12 PM", "4 PM", "Now"]
   },
@@ -28,10 +26,9 @@ const HISTORY = {
     series: {
       ph: [5.7, 5.8, 6.0, 6.2, 6.1, 5.9, 5.8, 5.9],
       ec: [1.41, 1.44, 1.47, 1.5, 1.49, 1.48, 1.51, 1.5],
-      tds: [705, 720, 735, 750, 745, 740, 755, 750],
       water_temperature: [21.5, 21.6, 21.9, 22.3, 22.6, 22.4, 22.2, 22.1],
-      turbidity: [3.5, 3.4, 3.3, 3.2, 3.2, 3.1, 3.2, 3.2],
-      ambient_humidity: [69, 70, 71, 73, 74, 73, 72, 72]
+      turbidity: [1.03, 1.02, 1.01, 1.0, 1.01, 1.0, 1.02, 1.0],
+      ambient_humidity: [61, 62, 63, 64, 63, 62, 62, 62]
     },
     labels: ["24h ago", "20h", "16h", "12h", "8h", "4h", "2h", "Now"]
   },
@@ -40,10 +37,9 @@ const HISTORY = {
     series: {
       ph: [6.0, 5.8, 5.9, 6.1, 6.0, 5.9, 5.9],
       ec: [1.46, 1.43, 1.47, 1.52, 1.49, 1.51, 1.5],
-      tds: [730, 715, 735, 760, 745, 755, 750],
       water_temperature: [22.4, 22.1, 21.9, 22.5, 22.2, 22.3, 22.1],
-      turbidity: [3.5, 3.4, 3.3, 3.2, 3.2, 3.1, 3.2],
-      ambient_humidity: [71, 70, 72, 74, 73, 72, 72]
+      turbidity: [1.01, 1.03, 1.02, 1.0, 1.01, 1.02, 1.0],
+      ambient_humidity: [61, 63, 64, 62, 61, 62, 62]
     },
     labels: ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Today"]
   }
@@ -60,8 +56,8 @@ const MOCK_EVENT_TEMPLATES = [
     id: "mock-sensor-resolved",
     minutesAgo: 3,
     category: "problem_resolved",
-    message: "Resolved: Ambient humidity returned to the configured range.",
-    payload: { state: "RESOLVED", source: "sensor", severity: "resolved", issue_key: "sensor:ambient_humidity:range" }
+    message: "Resolved: Water temperature returned to the configured range.",
+    payload: { state: "RESOLVED", source: "sensor", severity: "resolved", issue_key: "sensor:water_temperature:range" }
   },
   {
     id: "mock-fusion-resolved",
@@ -81,8 +77,8 @@ const MOCK_EVENT_TEMPLATES = [
     id: "mock-sensor-opened",
     minutesAgo: 18,
     category: "problem_opened",
-    message: "Ambient humidity was outside the configured range.",
-    payload: { state: "OPEN", source: "sensor", severity: "warning", issue_key: "sensor:ambient_humidity:range" }
+    message: "Water temperature was outside the configured range.",
+    payload: { state: "OPEN", source: "sensor", severity: "warning", issue_key: "sensor:water_temperature:range" }
   },
   {
     id: "mock-fusion-opened",
@@ -110,10 +106,9 @@ function mockEventRows(now = Date.now()) {
 const SENSOR_PRESENTATION = {
   ph: { label: "pH", icon: "◈" },
   ec: { label: "EC", icon: "⌁" },
-  tds: { label: "TDS", icon: "⋮" },
-  water_temperature: { label: "Water Temperature", icon: "♨" },
   turbidity: { label: "Turbidity", icon: "≋" },
-  ambient_humidity: { label: "Ambient Humidity", icon: "◌" }
+  water_temperature: { label: "Water Temperature", icon: "♨" },
+  ambient_humidity: { label: "Humidity", icon: "○" }
 };
 
 const DISPLAY_TO_BACKEND_MODE = {
@@ -129,6 +124,84 @@ function finiteNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function liveSensorValue(key, sensor) {
+  if (key === "ec") return finiteNumber(sensor.value_mScm ?? sensor.value);
+  if (key === "turbidity") return finiteNumber(sensor.value_ntu ?? sensor.value);
+  if (key === "water_temperature") return finiteNumber(sensor.value_C ?? sensor.value);
+  return finiteNumber(sensor.value);
+}
+
+function liveSensorUnit(key, sensor) {
+  if (key === "ph") return "pH";
+  if (key === "ec") return "mS/cm";
+  if (key === "turbidity") return "NTU";
+  if (key === "water_temperature") return "°C";
+  if (key === "ambient_humidity") return "%";
+  return sensor.unit ?? "";
+}
+
+function liveSensorBadge(key, sensor, value) {
+  const backendStatus = String(sensor.status ?? "UNAVAILABLE");
+  if (value === null) {
+    if (/baseline_pending/i.test(backendStatus)) return "BASELINE PENDING";
+    if (/error|fault/i.test(backendStatus)) return "ERROR";
+    return "UNAVAILABLE";
+  }
+
+  const classification = String(sensor.classification ?? "").trim();
+  if (classification && classification.toUpperCase() !== "UNAVAILABLE") return classification;
+  if (/error|fault/i.test(backendStatus)) return "ERROR";
+  if (/warning/i.test(backendStatus)) return "WARNING";
+  return "CONNECTED";
+}
+
+function liveSensorDetail(key, sensor, healthStatus) {
+  if (["ph", "ec", "turbidity"].includes(key)) return "";
+  const details = [];
+  const backendStatus = String(sensor.status ?? healthStatus ?? "").trim();
+  if (backendStatus) details.push(backendStatus);
+
+  const filteredVoltage = finiteNumber(sensor.filtered_voltage_V);
+  if (filteredVoltage !== null) details.push(`Filtered ${filteredVoltage.toFixed(4)} V`);
+  if (sensor.spike === true) details.push("Spike flagged by backend");
+
+  if (key === "turbidity") {
+    const reference = finiteNumber(sensor.reference_voltage_V);
+    if (reference !== null) details.push(`1.00 NTU reference ${reference.toFixed(4)} V`);
+  }
+  return details.join(" · ");
+}
+
+export function normalizeLiveSensorSnapshot(payload, health = null) {
+  const source = payload?.sensors;
+  if (!source || typeof source !== "object") {
+    return Object.entries(SENSOR_PRESENTATION).map(([key, presentation]) => ({
+      ...presentation,
+      value: "—",
+      unit: liveSensorUnit(key, {}),
+      status: "UNAVAILABLE",
+      detail: "The live sensor snapshot is unavailable.",
+      isRaw: false,
+      lastReadingAt: null
+    }));
+  }
+
+  return Object.entries(SENSOR_PRESENTATION).map(([key, presentation]) => {
+    const sensor = source[key] && typeof source[key] === "object" ? source[key] : {};
+    const value = liveSensorValue(key, sensor);
+    const healthKey = key;
+    return {
+      ...presentation,
+      value: value === null ? "—" : (["ph", "ec", "turbidity"].includes(key) ? Number(value).toFixed(4) : String(value)),
+      unit: liveSensorUnit(key, sensor),
+      status: liveSensorBadge(key, sensor, value),
+      detail: liveSensorDetail(key, sensor, health?.sensors?.[healthKey]),
+      isRaw: false,
+      lastReadingAt: payload.timestamp ?? health?.timestamp ?? null
+    };
+  });
 }
 
 function historyStart(range, now) {
@@ -148,26 +221,12 @@ function historyLabel(timestamp, range) {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
 }
 
-export function normalizeBackendSnapshot(state) {
+export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth = null) {
   if (!state || typeof state !== "object" || !state.sensors || !state.automation) {
     throw new Error("The VERDE backend returned an invalid status response.");
   }
 
-  const sensors = Object.entries(SENSOR_PRESENTATION).map(([key, presentation]) => {
-    const sensor = state.sensors[key] ?? {};
-    const calibratedValue = sensor.value;
-    const rawValue = finiteNumber(sensor.raw_value);
-    const showRaw = (calibratedValue === null || calibratedValue === undefined) && rawValue !== null;
-    return {
-      ...presentation,
-      value: showRaw ? String(rawValue) : calibratedValue === null || calibratedValue === undefined ? "—" : String(calibratedValue),
-      unit: showRaw ? sensor.raw_unit ?? "V" : sensor.unit ?? "",
-      status: sensor.status ?? "UNAVAILABLE",
-      detail: sensor.detail ?? "",
-      isRaw: showRaw,
-      lastReadingAt: sensor.last_reading_timestamp ?? null
-    };
-  });
+  const sensors = normalizeLiveSensorSnapshot(liveSensors, sensorHealth);
 
   const plant = state.plant_condition ?? {};
   const pest = state.pest_detection ?? {};
@@ -182,8 +241,8 @@ export function normalizeBackendSnapshot(state) {
     mode: activeMode,
     requestedMode: selectedMode,
     modeOverride: state.automation.override ? state.automation.override_reason : null,
-    updatedAt: state.timestamp,
-    systemStatus: state.system_status ?? "UNAVAILABLE",
+    updatedAt: liveSensors?.timestamp ?? sensorHealth?.timestamp ?? state.timestamp,
+    systemStatus: sensorHealth?.status ?? liveSensors?.system?.overall_status ?? state.system_status ?? "UNAVAILABLE",
     sensors,
     waterQuality: {
       status: resultValue(state.water_quality),
@@ -215,7 +274,7 @@ export function normalizeBackendSnapshot(state) {
     })),
     settings: {
       backendConnected: true,
-      backendLabel: "Connected locally",
+      backendLabel: sensorHealth?.status ? `Sensors ${sensorHealth.status}` : "Connected locally",
       version: `v${state.version ?? "0.1"}`
     }
   };
@@ -346,7 +405,12 @@ export class VerdeApi {
   }
 
   async getSnapshot() {
-    return normalizeBackendSnapshot(await this.request("/api/status"));
+    const [state, liveSensors, sensorHealth] = await Promise.all([
+      this.request("/api/status"),
+      this.request("/api/sensors/latest"),
+      this.request("/api/sensors/health")
+    ]);
+    return normalizeBackendSnapshot(state, liveSensors, sensorHealth);
   }
 
   async getHistory(range = "Today", selectedMetric = null) {
@@ -447,10 +511,9 @@ export class MockVerdeApi {
       sensors: [
         { label: "pH", value: "5.9", unit: "", status: "Optimal", icon: "◈" },
         { label: "EC", value: "1.5", unit: "mS/cm", status: "Optimal", icon: "⌁" },
-        { label: "TDS", value: "750", unit: "ppm", status: "Normal", icon: "⋮" },
+        { label: "Turbidity", value: "1.00", unit: "NTU", status: "Optimal", icon: "≋", detail: "Project 1.00 NTU reference calibration" },
         { label: "Water Temperature", value: "22.1", unit: "°C", status: "Optimal", icon: "♨" },
-        { label: "Turbidity", value: "3.2", unit: "NTU", status: "Optimal", icon: "≋" },
-        { label: "Ambient Humidity", value: "72", unit: "%", status: "Normal", icon: "◌" }
+        { label: "Humidity", value: "62", unit: "%", status: "Connected", icon: "○" },
       ],
       waterQuality: {
         status: "Optimal",

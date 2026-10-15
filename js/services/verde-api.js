@@ -116,6 +116,8 @@ const SENSOR_PRESENTATION = {
   ambient_humidity: { label: "Ambient Humidity", icon: "◌" }
 };
 
+const HARDWARE_FAULT_STATUS = /fault|error|not\s*connected|disconnected|offline|unavailable|missing|unknown/i;
+
 const DISPLAY_TO_BACKEND_MODE = {
   "Full Automation": "Full Automation Mode",
   "Semi-Automation": "Semi-Automation Mode"
@@ -129,6 +131,18 @@ function finiteNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function hasSensorOutput(sensor) {
+  return (sensor.value !== null && sensor.value !== undefined && sensor.value !== "")
+    || finiteNumber(sensor.raw_value) !== null;
+}
+
+function sensorStatus(sensor) {
+  const status = String(sensor.status ?? "").trim();
+  return !hasSensorOutput(sensor) || !status || HARDWARE_FAULT_STATUS.test(status)
+    ? "Faulty Sensors"
+    : status;
 }
 
 function historyStart(range, now) {
@@ -162,8 +176,8 @@ export function normalizeBackendSnapshot(state) {
       ...presentation,
       value: showRaw ? String(rawValue) : calibratedValue === null || calibratedValue === undefined ? "—" : String(calibratedValue),
       unit: showRaw ? sensor.raw_unit ?? "V" : sensor.unit ?? "",
-      status: sensor.status ?? "UNAVAILABLE",
-      detail: sensor.detail ?? "",
+      status: sensorStatus(sensor),
+      detail: sensor.detail ?? (sensorStatus(sensor) === "Faulty Sensors" ? "The backend is not producing a reading." : ""),
       isRaw: showRaw,
       lastReadingAt: sensor.last_reading_timestamp ?? null
     };
@@ -172,6 +186,8 @@ export function normalizeBackendSnapshot(state) {
   const plant = state.plant_condition ?? {};
   const pest = state.pest_detection ?? {};
   const camera = state.camera ?? {};
+  const cameraStatus = String(camera.status ?? "").trim();
+  const cameraAvailable = camera.image_available === true && !HARDWARE_FAULT_STATUS.test(cameraStatus);
   const fusion = state.fusion ?? {};
   const selectedMode = displayMode(state.automation.selected_mode);
   const activeMode = displayMode(state.automation.active_mode);
@@ -195,9 +211,9 @@ export function normalizeBackendSnapshot(state) {
       pestDetected: pest.value === "Pest Detected" ? true : pest.value === "No Pest Detected" ? false : null,
       pestStatus: resultValue(pest),
       confidence: "Unavailable",
-      frameUrl: camera.image_available ? `/api/camera/frame?v=${encodeURIComponent(camera.capture_version ?? "latest")}` : null,
+      frameUrl: cameraAvailable ? `/api/camera/frame?v=${encodeURIComponent(camera.capture_version ?? "latest")}` : null,
       lastCaptureAt: camera.last_capture_timestamp ?? null,
-      cameraStatus: camera.status ?? "UNAVAILABLE"
+      cameraStatus: cameraAvailable ? cameraStatus || "CONNECTED" : "Faulty Camera"
     },
     fusion: {
       confidence: resultValue(fusion),

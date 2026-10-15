@@ -104,6 +104,20 @@ test("backend status is normalized without inventing unavailable readings or AI 
   assert.equal(snapshot.plant.frameUrl, "/api/camera/frame?v=4");
 });
 
+test("missing backend sensor readings are presented as faulty sensors", () => {
+  const state = structuredClone(backendState);
+  state.sensors.ph = { status: "NOT CONNECTED", value: null, unit: "", detail: "No ADS1115 reading" };
+  state.sensors.ec = { status: "CONNECTED", value: null, unit: "mS/cm" };
+  state.camera = { status: "NOT CONNECTED", image_available: false };
+
+  const snapshot = normalizeBackendSnapshot(state);
+
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "pH").status, "Faulty Sensors");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "EC").status, "Faulty Sensors");
+  assert.equal(snapshot.plant.cameraStatus, "Faulty Camera");
+  assert.equal(snapshot.plant.frameUrl, null);
+});
+
 test("backend history filters ranges, orders samples, and keeps empty ranges honest", () => {
   const now = new Date("2026-09-25T12:00:00Z");
   const rows = [

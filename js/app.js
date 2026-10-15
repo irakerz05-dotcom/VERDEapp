@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=13";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=13";
+import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=14";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=14";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -193,7 +193,7 @@ function renderPlants(data) {
   const frameUrl = safeResourceUrl(data.plant.frameUrl, window.location.href);
   const camera = frameUrl
     ? `<figure class="camera-frame"><img src="${safe(frameUrl)}" alt="Latest plant detection frame" /></figure>`
-    : `<section class="camera-placeholder" aria-label="Latest camera frame unavailable"><span aria-hidden="true">▧</span><h2>Camera frame unavailable</h2><p>${safe(data.plant.cameraStatus || "No camera capture is available.")}</p></section>`;
+    : `<section class="camera-placeholder" aria-label="Latest camera frame unavailable"><span aria-hidden="true">▧</span><h2>${data.plant.cameraStatus === "Faulty Camera" ? "Faulty Camera" : "Camera frame unavailable"}</h2><p>${safe(data.plant.cameraStatus === "Faulty Camera" ? "The backend is not producing camera frames." : data.plant.cameraStatus || "No camera capture is available.")}</p></section>`;
   const pestKnown = typeof data.plant.pestDetected === "boolean";
   const content = `<section class="page-title"><h2>Plant Monitoring</h2><p>${safe(sourceLabel(data))}</p></section>
     ${camera}
@@ -284,6 +284,51 @@ function renderSettings(data) {
   bindNav();
 }
 
+function unavailableSnapshot(error) {
+  const now = new Date().toISOString();
+  const sensors = [
+    ["pH", "◈"],
+    ["EC", "⌁"],
+    ["TDS", "⋮"],
+    ["Water Temperature", "♨"],
+    ["Turbidity", "≋"],
+    ["Ambient Humidity", "◌"]
+  ].map(([label, sensorIcon]) => ({
+    label,
+    icon: sensorIcon,
+    value: "—",
+    unit: "",
+    status: "Faulty Sensors",
+    detail: "Backend unavailable; no reading detected."
+  }));
+  return {
+    online: false,
+    isMock: false,
+    unavailable: true,
+    unavailableReason: error?.message || "The backend is unavailable.",
+    mode: "Unavailable",
+    requestedMode: "Unavailable",
+    modeOverride: null,
+    updatedAt: now,
+    systemStatus: "BACKEND UNAVAILABLE",
+    sensors,
+    waterQuality: { status: "Unavailable", summary: "The backend is unavailable, so water quality cannot be evaluated." },
+    plant: {
+      condition: "Unavailable",
+      status: "Faulty Camera",
+      pestDetected: null,
+      pestStatus: "Unavailable",
+      confidence: "Unavailable",
+      frameUrl: null,
+      lastCaptureAt: null,
+      cameraStatus: "Faulty Camera"
+    },
+    fusion: { confidence: "Unavailable", reason: "The backend is unavailable." },
+    alerts: [],
+    settings: { backendConnected: false, backendLabel: "Backend unavailable", version: "Unavailable" }
+  };
+}
+
 function renderLoading() {
   const content = `<section class="state-card" role="status"><span class="spinner" aria-hidden="true"></span><h2>Loading ${safe(activePage)}</h2><p>${usingMock ? "Reading explicit mock development data…" : "Connecting to the local VERDE backend…"}</p></section>`;
   app.innerHTML = `<div class="app-shell">${renderHeader({ online: navigator.onLine, isMock: usingMock })}${content}${renderNav()}</div>`;
@@ -329,7 +374,12 @@ async function render() {
       else renderDashboard(staleData);
       renderedPage = activePage;
     } else {
-      renderError(error);
+      const unavailableData = unavailableSnapshot(error);
+      if (activePage === "Plants") renderPlants(unavailableData);
+      else if (activePage === "Settings") renderSettings(unavailableData);
+      else if (activePage === "Dashboard") renderDashboard(unavailableData);
+      else renderError(error, unavailableData);
+      renderedPage = activePage;
     }
   }
 }

@@ -113,6 +113,14 @@ const SENSOR_PRESENTATION = {
 
 const HARDWARE_FAULT_STATUS = /fault|error|not\s*connected|disconnected|offline|unavailable|missing|unknown/i;
 
+// These are display-only guards for readings that indicate a disconnected or
+// unusable probe. They do not change backend calculations or stored values.
+const SENSOR_DISPLAY_LIMITS = {
+  ph: { maximum: 15 },
+  ec: { maximum: 0.05 },
+  turbidity: { maximum: 50 }
+};
+
 const DISPLAY_TO_BACKEND_MODE = {
   "Full Automation": "Full Automation Mode",
   "Semi-Automation": "Semi-Automation Mode"
@@ -176,6 +184,19 @@ function liveSensorDetail(key, sensor, healthStatus) {
   return details.join(" · ");
 }
 
+function isUnbelievableSensorValue(key, value) {
+  const limits = SENSOR_DISPLAY_LIMITS[key];
+  return value !== null && limits?.maximum !== undefined && value > limits.maximum;
+}
+
+function isFaultySensorReading(key, value, sensor) {
+  if (value === null || isUnbelievableSensorValue(key, value)) return true;
+  // A disconnected EC probe reports a tiny residual voltage/value instead of
+  // returning null, so treat the observed near-zero range as unavailable.
+  if (key === "ec" && value <= SENSOR_DISPLAY_LIMITS.ec.maximum) return true;
+  return HARDWARE_FAULT_STATUS.test(String(sensor.status ?? ""));
+}
+
 export function normalizeLiveSensorSnapshot(payload, health = null) {
   const source = payload?.sensors;
   if (!source || typeof source !== "object") {
@@ -193,13 +214,14 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
   return Object.entries(SENSOR_PRESENTATION).map(([key, presentation]) => {
     const sensor = source[key] && typeof source[key] === "object" ? source[key] : {};
     const value = liveSensorValue(key, sensor);
+    const faulty = isFaultySensorReading(key, value, sensor);
     const healthKey = key;
     return {
       ...presentation,
-      value: value === null ? "—" : (["ph", "ec", "turbidity"].includes(key) ? Number(value).toFixed(4) : String(value)),
+      value: faulty ? "—" : (["ph", "ec", "turbidity"].includes(key) ? Number(value).toFixed(4) : String(value)),
       unit: liveSensorUnit(key, sensor),
-      status: sensorStatus({ value, raw_value: sensor.raw_value, status: liveSensorBadge(key, sensor, value) }),
-      detail: liveSensorDetail(key, sensor, health?.sensors?.[healthKey]),
+      status: faulty ? "Faulty Sensors" : sensorStatus({ value, raw_value: sensor.raw_value, status: liveSensorBadge(key, sensor, value) }),
+      detail: faulty ? "" : liveSensorDetail(key, sensor, health?.sensors?.[healthKey]),
       isRaw: false,
       lastReadingAt: payload.timestamp ?? health?.timestamp ?? null
     };

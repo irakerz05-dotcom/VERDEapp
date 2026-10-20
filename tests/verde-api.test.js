@@ -5,8 +5,27 @@ import {
   VerdeApi,
   normalizeBackendEvents,
   normalizeBackendHistory,
-  normalizeBackendSnapshot
+  normalizeBackendSnapshot,
+  normalizeLiveSensorSnapshot
 } from "../js/services/verde-api.js";
+
+test("implausible live probe readings display as faulty without changing backend values", () => {
+  const snapshot = normalizeLiveSensorSnapshot({ sensors: {
+    ph: { value: 18.5430, status: "CONNECTED" },
+    ec: { value_mScm: 0.0386, status: "CONNECTED" },
+    turbidity: { value_ntu: 54.6178, status: "CONNECTED" },
+    water_temperature: { value: null, status: "ERROR", detail: "RuntimeError: no valid device" },
+    ambient_humidity: { value: 51, status: "CONNECTED" }
+  } });
+
+  for (const label of ["pH", "EC", "Turbidity", "Water Temperature"]) {
+    const sensor = snapshot.find((item) => item.label === label);
+    assert.equal(sensor.status, "Faulty Sensors");
+    assert.equal(sensor.value, "—");
+    assert.equal(sensor.detail, "");
+  }
+  assert.equal(snapshot.find((item) => item.label === "Humidity").value, "51");
+});
 
 test("snapshot contains complete mock dashboard, plant, fusion, and settings data", async () => {
   const api = new MockVerdeApi({ delay: 0 });

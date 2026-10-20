@@ -117,7 +117,6 @@ const HARDWARE_FAULT_STATUS = /fault|error|not\s*connected|disconnected|offline|
 // unusable probe. They do not change backend calculations or stored values.
 const SENSOR_DISPLAY_LIMITS = {
   ph: { maximum: 15 },
-  ec: { maximum: 0.05 },
   turbidity: { maximum: 50 }
 };
 
@@ -191,9 +190,6 @@ function isUnbelievableSensorValue(key, value) {
 
 function isFaultySensorReading(key, value, sensor) {
   if (value === null || isUnbelievableSensorValue(key, value)) return true;
-  // A disconnected EC probe reports a tiny residual voltage/value instead of
-  // returning null, so treat the observed near-zero range as unavailable.
-  if (key === "ec" && value <= SENSOR_DISPLAY_LIMITS.ec.maximum) return true;
   return HARDWARE_FAULT_STATUS.test(String(sensor.status ?? ""));
 }
 

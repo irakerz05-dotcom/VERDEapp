@@ -18,12 +18,15 @@ test("implausible live probe readings display as faulty without changing backend
     ambient_humidity: { value: 51, status: "CONNECTED" }
   } });
 
-  for (const label of ["pH", "EC", "Turbidity", "Water Temperature"]) {
+  for (const label of ["pH", "Turbidity", "Water Temperature"]) {
     const sensor = snapshot.find((item) => item.label === label);
     assert.equal(sensor.status, "Faulty Sensors");
     assert.equal(sensor.value, "—");
     assert.equal(sensor.detail, "");
   }
+  const ec = snapshot.find((item) => item.label === "EC");
+  assert.equal(ec.status, "CONNECTED");
+  assert.equal(ec.value, "0.0386");
   assert.equal(snapshot.find((item) => item.label === "Humidity").value, "51");
 });
 

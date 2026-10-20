@@ -9,17 +9,13 @@ import {
   normalizeLiveSensorSnapshot
 } from "../js/services/verde-api.js";
 
-test("sensor connection status controls fault display without value thresholds", () => {
+test("current wiring profile marks unplugged probes faulty without value thresholds", () => {
   const snapshot = normalizeLiveSensorSnapshot({ sensors: {
     ph: { value: 18.5430, status: "CONNECTED" },
     ec: { value_mScm: 0.0386, status: "CONNECTED" },
     turbidity: { value_ntu: 54.6178, status: "CONNECTED" },
     water_temperature: { value: null, status: "ERROR", detail: "RuntimeError: no valid device" },
     ambient_humidity: { value: 51, status: "CONNECTED" }
-  } }, { sensors: {
-    ph: { status: "NOT CONNECTED" },
-    turbidity: { status: "NOT CONNECTED" },
-    water_temperature: { status: "NOT CONNECTED" }
   } });
 
   for (const label of ["pH", "Turbidity", "Water Temperature"]) {
@@ -29,8 +25,8 @@ test("sensor connection status controls fault display without value thresholds",
     assert.equal(sensor.detail, "");
   }
   const ec = snapshot.find((item) => item.label === "EC");
-  assert.equal(ec.status, "CONNECTED");
-  assert.equal(ec.value, "0.0386");
+  assert.equal(ec.status, "Faulty Sensors");
+  assert.equal(ec.value, "—");
   assert.equal(snapshot.find((item) => item.label === "Humidity").value, "51");
 });
 

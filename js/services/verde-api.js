@@ -113,11 +113,6 @@ const SENSOR_PRESENTATION = {
 
 const HARDWARE_FAULT_STATUS = /fault|error|not\s*connected|disconnected|offline|unavailable|missing|unknown/i;
 
-// Current Raspberry Pi wiring profile: only the DHT11 humidity probe is
-// connected. These are display-only flags; backend readings and formulas are
-// left untouched. Remove a key when that physical probe is connected again.
-const CURRENTLY_UNPLUGGED_SENSOR_KEYS = new Set(["ph", "ec", "turbidity", "water_temperature"]);
-
 const DISPLAY_TO_BACKEND_MODE = {
   "Full Automation": "Full Automation Mode",
   "Semi-Automation": "Semi-Automation Mode"
@@ -188,8 +183,7 @@ function sensorHealthStatus(healthStatus) {
   return healthStatus ?? "";
 }
 
-function isFaultySensorReading(key, value, sensor, healthStatus) {
-  if (CURRENTLY_UNPLUGGED_SENSOR_KEYS.has(key)) return true;
+function isFaultySensorReading(value, sensor, healthStatus) {
   if (value === null) return true;
   const status = String(sensorHealthStatus(healthStatus) || sensor.status || "").trim();
   return !status || HARDWARE_FAULT_STATUS.test(status);
@@ -214,7 +208,7 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
     const value = liveSensorValue(key, sensor);
     const healthKey = key;
     const healthStatus = health?.sensors?.[healthKey];
-    const faulty = isFaultySensorReading(key, value, sensor, healthStatus);
+    const faulty = isFaultySensorReading(value, sensor, healthStatus);
     return {
       ...presentation,
       value: faulty ? "—" : (["ph", "ec", "turbidity"].includes(key) ? Number(value).toFixed(4) : String(value)),

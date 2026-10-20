@@ -17,7 +17,6 @@ test("sensor connection status controls fault display without value thresholds",
     water_temperature: { value: null, status: "ERROR", detail: "RuntimeError: no valid device" },
     ambient_humidity: { value: 51, status: "CONNECTED" }
   } }, { sensors: {
-    ph: { status: "NOT CONNECTED" },
     turbidity: { status: "NOT CONNECTED" },
     water_temperature: { status: "NOT CONNECTED" }
   } });
@@ -32,6 +31,16 @@ test("sensor connection status controls fault display without value thresholds",
   assert.equal(ec.status, "CONNECTED");
   assert.equal(ec.value, "0.0386");
   assert.equal(snapshot.find((item) => item.label === "Humidity").value, "51");
+
+  const normalPh = normalizeLiveSensorSnapshot({ sensors: {
+    ph: { value: 7, status: "CONNECTED" },
+    ec: { value_mScm: 1.2, status: "CONNECTED" },
+    turbidity: { value_ntu: 3, status: "CONNECTED" },
+    water_temperature: { value_C: 22, status: "CONNECTED" },
+    ambient_humidity: { value: 51, status: "CONNECTED" }
+  } }).find((item) => item.label === "pH");
+  assert.equal(normalPh.status, "CONNECTED");
+  assert.equal(normalPh.value, "7.0000");
 });
 
 test("snapshot contains complete mock dashboard, plant, fusion, and settings data", async () => {

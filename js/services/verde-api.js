@@ -112,6 +112,7 @@ const SENSOR_PRESENTATION = {
 };
 
 const HARDWARE_FAULT_STATUS = /fault|error|not\s*connected|disconnected|offline|unavailable|missing|unknown/i;
+const SENSOR_DISPLAY_LIMITS = { ph: { maximum: 15 } };
 
 const DISPLAY_TO_BACKEND_MODE = {
   "Full Automation": "Full Automation Mode",
@@ -183,7 +184,13 @@ function sensorHealthStatus(healthStatus) {
   return healthStatus ?? "";
 }
 
-function isFaultySensorReading(value, sensor, healthStatus) {
+function isUnbelievableSensorValue(key, value) {
+  const maximum = SENSOR_DISPLAY_LIMITS[key]?.maximum;
+  return value !== null && maximum !== undefined && value > maximum;
+}
+
+function isFaultySensorReading(key, value, sensor, healthStatus) {
+  if (isUnbelievableSensorValue(key, value)) return true;
   if (value === null) return true;
   const status = String(sensorHealthStatus(healthStatus) || sensor.status || "").trim();
   return !status || HARDWARE_FAULT_STATUS.test(status);
@@ -208,7 +215,7 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
     const value = liveSensorValue(key, sensor);
     const healthKey = key;
     const healthStatus = health?.sensors?.[healthKey];
-    const faulty = isFaultySensorReading(value, sensor, healthStatus);
+    const faulty = isFaultySensorReading(key, value, sensor, healthStatus);
     return {
       ...presentation,
       value: faulty ? "—" : (["ph", "ec", "turbidity"].includes(key) ? Number(value).toFixed(4) : String(value)),

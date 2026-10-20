@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=20";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=20";
+import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=21";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=21";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -392,6 +392,10 @@ function renderLoading() {
 }
 
 function renderError(error) {
+  if (!usingMock) {
+    renderUnavailable(unavailableSnapshot(error));
+    return;
+  }
   const isTimeout = error?.name === "TimeoutError";
   const content = `<section class="state-card error-card" role="alert"><span aria-hidden="true">!</span><h2>${isTimeout ? "Request timed out" : `Unable to load ${usingMock ? "mock data" : "the VERDE backend"}`}</h2><p>${safe(error?.message || "An unexpected error occurred.")}</p>${usingMock ? "" : "<p>Start the backend with this PWA as its web root, then retry. Live failures never fall back to fake readings.</p>"}<button id="retry-button" class="primary" type="button">Try again</button></section>`;
   app.innerHTML = `<div class="app-shell">${renderHeader({ online: false, isMock: usingMock })}${content}${renderNav()}</div>`;

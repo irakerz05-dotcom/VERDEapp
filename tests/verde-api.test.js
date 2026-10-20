@@ -9,13 +9,17 @@ import {
   normalizeLiveSensorSnapshot
 } from "../js/services/verde-api.js";
 
-test("implausible live probe readings display as faulty without changing backend values", () => {
+test("sensor connection status controls fault display without value thresholds", () => {
   const snapshot = normalizeLiveSensorSnapshot({ sensors: {
     ph: { value: 18.5430, status: "CONNECTED" },
     ec: { value_mScm: 0.0386, status: "CONNECTED" },
     turbidity: { value_ntu: 54.6178, status: "CONNECTED" },
     water_temperature: { value: null, status: "ERROR", detail: "RuntimeError: no valid device" },
     ambient_humidity: { value: 51, status: "CONNECTED" }
+  } }, { sensors: {
+    ph: { status: "NOT CONNECTED" },
+    turbidity: { status: "NOT CONNECTED" },
+    water_temperature: { status: "NOT CONNECTED" }
   } });
 
   for (const label of ["pH", "Turbidity", "Water Temperature"]) {

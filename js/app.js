@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=19";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=19";
+import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=20";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=20";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -399,6 +399,12 @@ function renderError(error) {
   bindNav();
 }
 
+function renderUnavailable(data) {
+  if (activePage === "Plants") renderPlants(data);
+  else if (activePage === "Settings") renderSettings(data);
+  else renderDashboard(data);
+}
+
 async function render() {
   const sequence = ++renderSequence;
   if (!lastSnapshot || renderedPage !== activePage) renderLoading();
@@ -435,10 +441,7 @@ async function render() {
       renderedPage = activePage;
     } else {
       const unavailableData = unavailableSnapshot(error);
-      if (activePage === "Plants") renderPlants(unavailableData);
-      else if (activePage === "Settings") renderSettings(unavailableData);
-      else if (activePage === "Dashboard") renderDashboard(unavailableData);
-      else renderError(error);
+      renderUnavailable(unavailableData);
       renderedPage = activePage;
     }
   }

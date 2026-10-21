@@ -44,6 +44,24 @@ Open `http://127.0.0.1:8000`. The backend serves the PWA and its API from one
 origin, preserving its Host, Origin, and session-token checks. The previous
 backend dashboard remains available at `/legacy` while `--web-root` is active.
 
+### Run the frontend automatically when the backend is unavailable
+
+If the backend is stopped, Tailscale still needs a process listening on port
+`8000` to serve the PWA. Install the included Raspberry Pi systemd service
+once from this repository:
+
+```bash
+sudo cp deploy/verde-frontend.service /etc/systemd/system/verde-frontend.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now verde-frontend.service
+```
+
+The service starts the frontend automatically after boot and keeps the same
+port `8000` for the existing Tailscale Serve configuration. When this fallback
+server is active, the backend API is unavailable by design, so the app shows
+`Faulty Sensors` and `Faulty Camera`. Stop this service before starting the
+backend on port `8000`.
+
 ## Test locally
 
 The automated tests use Node's built-in test runner and require no downloaded dependencies:

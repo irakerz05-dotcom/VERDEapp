@@ -1,5 +1,5 @@
 [Unit]
-Description=VERDE frontend fallback server
+Description=VERDE frontend and backend API proxy
 After=network-online.target
 Wants=network-online.target
 
@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 User=verde
 WorkingDirectory=/home/verde/VERDEapp
-ExecStart=/usr/bin/python3 -m http.server 8000 --bind 127.0.0.1
+ExecStart=/usr/bin/python3 /home/verde/VERDEapp/deploy/verde-frontend-proxy.py --port 8000 --backend http://127.0.0.1:8001
 Restart=always
 RestartSec=3
 

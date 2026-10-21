@@ -210,8 +210,24 @@ test("real adapter uses same-origin routes, session token, and backend mode name
   assert.equal(snapshot.settings.backendConnected, true);
   assert.equal(result.activeMode, "Semi-Automation");
   assert.equal(acknowledged.system_status, backendState.system_status);
-  assert.deepEqual(calls.map((call) => call.url), ["/api/status", "/api/session", "/api/mode", "/api/incidents/acknowledge"]);
+  assert.deepEqual(calls.map((call) => call.url), ["/api/status", "/api/sensors/latest", "/api/sensors/health", "/api/session", "/api/mode", "/api/incidents/acknowledge"]);
   assert.equal(calls[2].options.headers["X-VERDE-Token"], "test-token");
   assert.deepEqual(JSON.parse(calls[2].options.body), { mode: "Full Automation Mode" });
   assert.deepEqual(JSON.parse(calls[3].options.body), { issue_key: "vision:pest" });
+});
+
+test("real adapter keeps status and camera data when optional sensor routes are unavailable", async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url.endsWith("/api/status")) return { ok: true, status: 200, json: async () => backendState };
+    return { ok: false, status: 404, json: async () => ({ error: "Not found" }) };
+  };
+  const snapshot = await new VerdeApi({ fetchImpl }).getSnapshot();
+
+  assert.equal(snapshot.online, true);
+  assert.equal(snapshot.plant.cameraStatus, "CONNECTED");
+  assert.equal(snapshot.plant.frameUrl, "/api/camera/frame?v=4");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "pH").value, "6.1000");
+  assert.deepEqual(calls, ["/api/status", "/api/sensors/latest", "/api/sensors/health"]);
 });

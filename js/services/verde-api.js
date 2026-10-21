@@ -443,12 +443,29 @@ export class VerdeApi {
   }
 
   async getSnapshot() {
-    const [state, liveSensors, sensorHealth] = await Promise.all([
-      this.request("/api/status"),
-      this.request("/api/sensors/latest"),
-      this.request("/api/sensors/health")
+    // Older validated Pi backends expose the complete live snapshot through
+    // /api/status, but do not have the newer sensor detail routes. Those
+    // optional routes must not make a working camera appear faulty.
+    const state = await this.request("/api/status");
+    const [liveSensors, sensorHealth] = await Promise.all([
+      this.optionalRequest("/api/sensors/latest"),
+      this.optionalRequest("/api/sensors/health")
     ]);
-    return normalizeBackendSnapshot(state, liveSensors, sensorHealth);
+    const fallbackSensors = liveSensors ?? (state.sensors ? {
+      sensors: state.sensors,
+      timestamp: state.timestamp
+    } : null);
+    const fallbackHealth = sensorHealth ?? state.sensor_health ?? state.sensors_health ?? state.health ?? null;
+    return normalizeBackendSnapshot(state, fallbackSensors, fallbackHealth);
+  }
+
+  async optionalRequest(path) {
+    try {
+      return await this.request(path);
+    } catch (error) {
+      if (error.status === 404) return null;
+      throw error;
+    }
   }
 
   async getHistory(range = "Today", selectedMetric = null) {

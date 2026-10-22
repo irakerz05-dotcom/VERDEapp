@@ -43,12 +43,30 @@ test("sensor connection status controls fault display without value thresholds",
   assert.equal(normalPh.value, "7.0000");
 });
 
+test("a valid live value without a status remains visible; explicit faults still hide readings", () => {
+  const readings = normalizeLiveSensorSnapshot({ sensors: {
+    ph: { value: 6.2 },
+    ec: { value_mScm: 1.45 },
+    turbidity: { value_ntu: 3.1 },
+    water_temperature: { value_C: 23 },
+    ambient_humidity: { value: 65 }
+  } });
+  assert.equal(readings.find((item) => item.label === "EC").value, "1.4500");
+  assert.equal(readings.find((item) => item.label === "Humidity").status, "CONNECTED");
+
+  const withFault = normalizeLiveSensorSnapshot({ sensors: {
+    ec: { value_mScm: 1.45, status: "CONNECTED" }
+  } }, { sensors: { ec: { status: "DISCONNECTED" } } });
+  assert.equal(withFault.find((item) => item.label === "EC").value, "—");
+  assert.equal(withFault.find((item) => item.label === "EC").status, "Faulty Sensors");
+});
+
 test("snapshot contains complete mock dashboard, plant, fusion, and settings data", async () => {
   const api = new MockVerdeApi({ delay: 0 });
   const snapshot = await api.getSnapshot();
 
   assert.equal(snapshot.mode, "Full Automation");
-  assert.equal(snapshot.sensors.length, 6);
+  assert.equal(snapshot.sensors.length, 5);
   assert.equal(snapshot.plant.condition, "Healthy");
   assert.equal(snapshot.fusion.confidence, "High");
   assert.equal(snapshot.settings.backendConnected, false);
@@ -130,16 +148,14 @@ const backendState = {
 };
 
 test("backend status is normalized without inventing unavailable readings or AI results", () => {
-  const snapshot = normalizeBackendSnapshot(backendState);
+  const snapshot = normalizeBackendSnapshot(backendState, { sensors: backendState.sensors });
   assert.equal(snapshot.isMock, false);
   assert.equal(snapshot.mode, "Semi-Automation");
   assert.equal(snapshot.requestedMode, "Full Automation");
   assert.match(snapshot.modeOverride, /Required water sensor/);
-  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "TDS").value, "3.35");
-  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "TDS").unit, "V");
-  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "TDS").isRaw, true);
-  assert.match(snapshot.sensors.find((sensor) => sensor.label === "TDS").detail, /raw voltage/);
-  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Ambient Humidity").value, "77");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Water Temperature").value, "—");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Water Temperature").status, "Faulty Sensors");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Humidity").value, "77");
   assert.equal(snapshot.plant.pestDetected, null);
   assert.equal(snapshot.plant.frameUrl, "/api/camera/frame?v=4");
   assert.equal(snapshot.incidents[0].issueKey, "vision:pest");
@@ -211,9 +227,9 @@ test("real adapter uses same-origin routes, session token, and backend mode name
   assert.equal(result.activeMode, "Semi-Automation");
   assert.equal(acknowledged.system_status, backendState.system_status);
   assert.deepEqual(calls.map((call) => call.url), ["/api/status", "/api/sensors/latest", "/api/sensors/health", "/api/session", "/api/mode", "/api/incidents/acknowledge"]);
-  assert.equal(calls[2].options.headers["X-VERDE-Token"], "test-token");
-  assert.deepEqual(JSON.parse(calls[2].options.body), { mode: "Full Automation Mode" });
-  assert.deepEqual(JSON.parse(calls[3].options.body), { issue_key: "vision:pest" });
+  assert.equal(calls[4].options.headers["X-VERDE-Token"], "test-token");
+  assert.deepEqual(JSON.parse(calls[4].options.body), { mode: "Full Automation Mode" });
+  assert.deepEqual(JSON.parse(calls[5].options.body), { issue_key: "vision:pest" });
 });
 
 test("real adapter keeps status and camera data when optional sensor routes are unavailable", async () => {

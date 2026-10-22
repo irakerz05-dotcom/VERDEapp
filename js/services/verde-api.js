@@ -192,8 +192,10 @@ function isUnbelievableSensorValue(key, value) {
 function isFaultySensorReading(key, value, sensor, healthStatus) {
   if (isUnbelievableSensorValue(key, value)) return true;
   if (value === null) return true;
-  const status = String(sensorHealthStatus(healthStatus) || sensor.status || "").trim();
-  return !status || HARDWARE_FAULT_STATUS.test(status);
+  const reportedStatuses = [sensor.status, sensorHealthStatus(healthStatus)]
+    .map((status) => String(status ?? "").trim())
+    .filter(Boolean);
+  return reportedStatuses.some((status) => HARDWARE_FAULT_STATUS.test(status));
 }
 
 export function normalizeLiveSensorSnapshot(payload, health = null) {

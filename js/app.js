@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=24";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=24";
+import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=26";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=26";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -230,13 +230,23 @@ function renderPlants(data) {
   const conditionTone = statusClass(data.plant.condition);
   const frameUrl = safeResourceUrl(data.plant.frameUrl, window.location.href);
   const camera = frameUrl
-    ? `<figure class="camera-frame"><img src="${safe(frameUrl)}" alt="Latest plant detection frame" /></figure>`
+    ? `<figure class="camera-frame"><img src="${safe(frameUrl)}" alt="${data.plant.aiAnnotated ? "Latest AI-annotated plant detection frame" : "Latest camera frame"}" />${data.plant.aiAnnotated ? `<figcaption><b>Experimental AI overlay</b><span>Boxes and confidence come from the latest completed two-stage YOLO analysis.</span></figcaption>` : ""}</figure>`
     : `<section class="camera-placeholder" aria-label="Latest camera frame unavailable"><span aria-hidden="true">▧</span><h2>${data.plant.cameraStatus === "Faulty Camera" ? "Faulty Camera" : "Camera frame unavailable"}</h2><p>${safe(data.plant.cameraStatus || "No camera capture is available.")}</p></section>`;
   const pestKnown = typeof data.plant.pestDetected === "boolean";
+  const classificationCards = (data.plant.classifications ?? []).map((classification) => {
+    const detected = Number.isInteger(classification.count) && classification.count > 0;
+    const tone = classification.label === "Wilting" ? "danger"
+      : classification.label === "Yellowing" ? "warn" : "good";
+    const count = classification.count === null
+      ? "Unavailable"
+      : `${classification.count} plant${classification.count === 1 ? "" : "s"}`;
+    const confidence = classification.confidence ? `${classification.confidence} max confidence` : "No qualifying result";
+    return `<article class="classification-card ${detected ? tone : "inactive"}"><span>${safe(classification.label)}</span><strong>${safe(count)}</strong><small>${safe(confidence)}</small></article>`;
+  }).join("");
   const content = `<section class="page-title"><h2>Plant Monitoring</h2><p>${safe(sourceLabel(data))}</p></section>
     ${camera}
-    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT CONDITION</p><h2>Vision analysis</h2></div></div><div class="plant-result"><div><span class="status ${conditionTone}"><b aria-hidden="true">${conditionTone === "good" ? "✓" : conditionTone === "danger" ? "!" : "·"}</b>${safe(data.plant.status)}</span><strong>${safe(data.plant.condition)}</strong></div><div class="confidence"><span>Model confidence</span><strong>${safe(data.plant.confidence)}</strong></div></div></section>
-    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◌</span><div><p class="eyebrow">PEST STATUS</p><h2>Presence detection only</h2></div></div><div class="notice ${pestKnown ? (data.plant.pestDetected ? "danger" : "good") : "warn"}"><b aria-hidden="true">${!pestKnown || data.plant.pestDetected ? "!" : "✓"}</b>${safe(data.plant.pestStatus)}</div></section>
+    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT CONDITION</p><h2>Vision analysis</h2></div></div><div class="plant-result"><div><span class="status ${conditionTone}"><b aria-hidden="true">${conditionTone === "good" ? "✓" : conditionTone === "danger" ? "!" : "·"}</b>${safe(data.plant.status)}</span><strong>${safe(data.plant.condition)}</strong><small class="analysis-detail">${safe(data.plant.analysisDetail)}</small></div><div class="confidence"><span>Model confidence</span><strong>${safe(data.plant.confidence)}</strong></div></div><div class="classification-grid" aria-label="Latest per-class plant analysis">${classificationCards}</div><p class="classification-note">Harvest-Ready is an experimental visual indication and should be confirmed using growing-day records.</p></section>
+    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◌</span><div><p class="eyebrow">PEST STATUS</p><h2>Presence detection only</h2></div></div><div class="notice ${pestKnown ? (data.plant.pestDetected ? "danger" : "good") : "warn"}"><b aria-hidden="true">${!pestKnown || data.plant.pestDetected ? "!" : "✓"}</b><div><strong>${safe(data.plant.pestStatus)}</strong><small>${safe(data.plant.pestDetail)}</small></div></div></section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>Reliability indicator</h2></div></div><div class="fusion-result"><strong>${safe(data.fusion.confidence.toUpperCase())}</strong><p>${safe(data.fusion.reason)}</p></div></section>`;
   app.innerHTML = renderShell(content, data);
   bindNav();
@@ -378,7 +388,7 @@ function unavailableSnapshot(error) {
     updatedAt: now, systemStatus: "BACKEND UNAVAILABLE", sensors,
     waterQuality: { status: "Unavailable", summary: "The backend is unavailable, so water quality cannot be evaluated." },
     plant: { condition: "Unavailable", status: "Faulty Camera", pestDetected: null,
-      pestStatus: "Unavailable", confidence: "Unavailable", frameUrl: null,
+      pestStatus: "Unavailable", pestDetail: "Pest analysis is unavailable.", confidence: "Unavailable", classifications: [], frameUrl: null,
       lastCaptureAt: null, cameraStatus: "Faulty Camera" },
     fusion: { confidence: "Unavailable", reason: "The backend is unavailable." },
     alerts: [], settings: { backendConnected: false, backendLabel: "Backend unavailable", version: "Unavailable" }

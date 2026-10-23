@@ -9,6 +9,20 @@ const HISTORY_METRICS = [
   { key: "ambient_humidity", label: "Humidity", unit: "%", color: "#2563a8" }
 ];
 
+const PLANT_CLASS_LABELS = ["Healthy", "Yellowing", "Wilting", "Harvest-Ready"];
+
+function normalizePlantClassifications(value) {
+  const source = value && typeof value === "object" ? value : {};
+  return PLANT_CLASS_LABELS.map((label) => {
+    const summary = source[label] && typeof source[label] === "object" ? source[label] : {};
+    const count = Number.isInteger(summary.count) && summary.count >= 0 ? summary.count : null;
+    const confidence = Number.isFinite(summary.confidence)
+      ? `${Math.round(summary.confidence * 100)}%`
+      : null;
+    return { label, count, confidence };
+  });
+}
+
 const HISTORY = {
   Today: {
     range: "Today",
@@ -271,6 +285,7 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
   const camera = state.camera ?? {};
   const cameraStatus = String(camera.status ?? "").trim();
   const cameraAvailable = camera.image_available === true && !HARDWARE_FAULT_STATUS.test(cameraStatus);
+  const aiAvailable = camera.ai_image_available === true && camera.ai_status === "READY";
   const fusion = state.fusion ?? {};
   const selectedMode = displayMode(state.automation.selected_mode);
   const activeMode = displayMode(state.automation.active_mode);
@@ -293,8 +308,14 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
       status: plant.status ?? "UNAVAILABLE",
       pestDetected: pest.value === "Pest Detected" ? true : pest.value === "No Pest Detected" ? false : null,
       pestStatus: resultValue(pest),
-      confidence: "Unavailable",
-      frameUrl: cameraAvailable ? `/api/camera/frame?v=${encodeURIComponent(camera.capture_version ?? "latest")}` : null,
+      pestDetail: pest.detail || "Pest analysis detail is unavailable.",
+      confidence: Number.isFinite(plant.confidence) ? `${Math.round(plant.confidence * 100)}%` : "Unavailable",
+      classifications: normalizePlantClassifications(plant.classifications),
+      frameUrl: aiAvailable
+        ? `/api/camera/annotated?v=${encodeURIComponent(camera.ai_capture_version ?? "latest")}`
+        : cameraAvailable ? `/api/camera/frame?v=${encodeURIComponent(camera.capture_version ?? "latest")}` : null,
+      aiAnnotated: aiAvailable,
+      analysisDetail: plant.detail || camera.ai_detail || plant.status || "Vision analysis unavailable.",
       lastCaptureAt: camera.last_capture_timestamp ?? null,
       cameraStatus: cameraAvailable ? cameraStatus || "CONNECTED" : "Faulty Camera"
     },
@@ -581,7 +602,14 @@ export class MockVerdeApi {
         status: "READY",
         pestDetected: false,
         pestStatus: "No Pest Detected",
+        pestDetail: "No qualifying pest detection in this mock frame; this does not confirm pest-free plants.",
         confidence: "92%",
+        classifications: [
+          { label: "Healthy", count: 5, confidence: "92%" },
+          { label: "Yellowing", count: 0, confidence: null },
+          { label: "Wilting", count: 0, confidence: null },
+          { label: "Harvest-Ready", count: 0, confidence: null }
+        ],
         frameUrl: null,
         lastCaptureAt: null,
         cameraStatus: "MOCK"

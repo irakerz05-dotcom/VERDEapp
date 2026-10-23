@@ -162,6 +162,47 @@ test("backend status is normalized without inventing unavailable readings or AI 
   assert.equal(snapshot.incidents[0].state, "OPEN");
 });
 
+test("fresh AI artifacts select the annotated frame and expose real confidence", () => {
+  const state = {
+    ...backendState,
+    camera: {
+      ...backendState.camera,
+      ai_status: "READY",
+      ai_image_available: true,
+      ai_capture_version: "2026-10-23T02:00:00+00:00",
+      ai_detail: "Experimental two-stage YOLO analysis"
+    },
+    plant_condition: {
+      status: "READY", value: "Healthy", confidence: 0.7578,
+      detail: "Experimental per-lettuce analysis: 5 plant(s); 5 classified Healthy.",
+      classifications: {
+        Healthy: { count: 5, confidence: 0.7578 },
+        Yellowing: { count: 0, confidence: null },
+        Wilting: { count: 0, confidence: null },
+        "Harvest-Ready": { count: 0, confidence: null }
+      }
+    },
+    pest_detection: {
+      status: "READY", value: "No Pest Detected", confidence: null,
+      detail: "No qualifying pest detection in the latest frame; this does not confirm pest-free plants."
+    }
+  };
+  const snapshot = normalizeBackendSnapshot(state, { sensors: state.sensors });
+  assert.equal(snapshot.plant.condition, "Healthy");
+  assert.equal(snapshot.plant.confidence, "76%");
+  assert.equal(snapshot.plant.pestDetected, false);
+  assert.equal(snapshot.plant.pestStatus, "No Pest Detected");
+  assert.match(snapshot.plant.pestDetail, /does not confirm/);
+  assert.deepEqual(snapshot.plant.classifications, [
+    { label: "Healthy", count: 5, confidence: "76%" },
+    { label: "Yellowing", count: 0, confidence: null },
+    { label: "Wilting", count: 0, confidence: null },
+    { label: "Harvest-Ready", count: 0, confidence: null }
+  ]);
+  assert.equal(snapshot.plant.aiAnnotated, true);
+  assert.match(snapshot.plant.frameUrl, /^\/api\/camera\/annotated\?v=/);
+});
+
 test("backend history filters ranges, orders samples, and keeps empty ranges honest", () => {
   const now = new Date("2026-09-25T12:00:00Z");
   const rows = [

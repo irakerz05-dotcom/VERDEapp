@@ -127,6 +127,8 @@ const SENSOR_PRESENTATION = {
 
 const HARDWARE_FAULT_STATUS = /fault|error|not\s*connected|disconnected|offline|unavailable|missing|unknown/i;
 const SENSOR_DISPLAY_LIMITS = { ph: { maximum: 15 } };
+const HUMIDITY_OPTIMAL_MIN = 65;
+const HUMIDITY_OPTIMAL_MAX = 78;
 
 const DISPLAY_TO_BACKEND_MODE = {
   "Full Automation": "Full Automation Mode",
@@ -165,6 +167,11 @@ function liveSensorBadge(key, sensor, value) {
     if (/baseline_pending/i.test(backendStatus)) return "BASELINE PENDING";
     if (/error|fault/i.test(backendStatus)) return "ERROR";
     return "UNAVAILABLE";
+  }
+
+  if (key === "ambient_humidity") {
+    return value >= HUMIDITY_OPTIMAL_MIN && value <= HUMIDITY_OPTIMAL_MAX
+      ? "Optimal" : "Suboptimal";
   }
 
   const classification = String(sensor.classification ?? "").trim();
@@ -257,7 +264,7 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
         lastReadingAt: payload.timestamp ?? null
       };
     }
-    if (value === null && /recovering/i.test(String(sensor.status ?? sensorHealthStatus(healthStatus)))) {
+    if (/recovering/i.test(String(sensor.status ?? sensorHealthStatus(healthStatus)))) {
       return {
         ...presentation,
         value: "—",
@@ -696,7 +703,7 @@ export class MockVerdeApi {
         { label: "EC", value: "1.5", unit: "mS/cm", status: "Optimal", icon: "⌁" },
         { label: "Turbidity", value: "1.00", unit: "NTU", status: "Optimal", icon: "≋", detail: "Project 1.00 NTU reference calibration" },
         { label: "Water Temperature", value: "22.1", unit: "°C", status: "Optimal", icon: "♨" },
-        { label: "Humidity", value: "62", unit: "%", status: "Connected", icon: "○" },
+        { label: "Humidity", value: "62", unit: "%", status: "Suboptimal", icon: "○" },
       ],
       waterQuality: {
         status: "Optimal",

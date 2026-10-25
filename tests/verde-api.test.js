@@ -53,7 +53,7 @@ test("a valid live value without a status remains visible; explicit faults still
     ambient_humidity: { value: 65 }
   } });
   assert.equal(readings.find((item) => item.label === "EC").value, "1.4500");
-  assert.equal(readings.find((item) => item.label === "Humidity").status, "CONNECTED");
+  assert.equal(readings.find((item) => item.label === "Humidity").status, "Optimal");
 
   const withFault = normalizeLiveSensorSnapshot({ sensors: {
     ec: { value_mScm: 1.45, status: "CONNECTED" }
@@ -86,6 +86,31 @@ test("A0 voltage remains visible when only the old A3 NTU calibration is invalid
   assert.equal(disconnected.value, "—");
 });
 
+test("live humidity is Optimal only from 65% through 78% inclusive", () => {
+  for (const [value, expected] of [
+    [64.9, "Suboptimal"], [65, "Optimal"], [72, "Optimal"],
+    [78, "Optimal"], [78.1, "Suboptimal"]
+  ]) {
+    const humidity = normalizeLiveSensorSnapshot({ sensors: {
+      ambient_humidity: { value, status: "CONNECTED: DHT11" }
+    } }).find((item) => item.label === "Humidity");
+    assert.equal(humidity.value, String(value));
+    assert.equal(humidity.status, expected);
+  }
+
+  const faulty = normalizeLiveSensorSnapshot({ sensors: {
+    ambient_humidity: { value: null, status: "ERROR: incomplete buffer" }
+  } }).find((item) => item.label === "Humidity");
+  assert.equal(faulty.status, "Faulty Sensors");
+  assert.equal(faulty.value, "—");
+
+  const recovering = normalizeLiveSensorSnapshot({ sensors: {
+    ambient_humidity: { value: 72, status: "RECOVERING: retrying DHT11" }
+  } }).find((item) => item.label === "Humidity");
+  assert.equal(recovering.status, "Recovering");
+  assert.equal(recovering.value, "—");
+});
+
 test("water temperature and humidity fail and recover independently", () => {
   const liveWater = { value_C: 25.125, status: "OK: DS18B20" };
   const liveHumidity = { value: 72, status: "CONNECTED: DHT11" };
@@ -93,9 +118,9 @@ test("water temperature and humidity fail and recover independently", () => {
   const failedHumidity = { value: null, status: "ERROR: incomplete buffer", read_error: "incomplete buffer" };
   const cases = [
     [failedWater, failedHumidity, "Faulty Sensors", "Faulty Sensors"],
-    [failedWater, liveHumidity, "Faulty Sensors", "CONNECTED"],
+    [failedWater, liveHumidity, "Faulty Sensors", "Optimal"],
     [liveWater, failedHumidity, "CONNECTED", "Faulty Sensors"],
-    [liveWater, liveHumidity, "CONNECTED", "CONNECTED"],
+    [liveWater, liveHumidity, "CONNECTED", "Optimal"],
     [liveWater, failedHumidity, "CONNECTED", "Faulty Sensors"]
   ];
   for (const [water, humidity, expectedWater, expectedHumidity] of cases) {
@@ -108,7 +133,7 @@ test("water temperature and humidity fail and recover independently", () => {
     assert.equal(temperatureCard.status, expectedWater);
     assert.equal(humidityCard.status, expectedHumidity);
     assert.equal(temperatureCard.value, expectedWater === "CONNECTED" ? "25.125" : "—");
-    assert.equal(humidityCard.value, expectedHumidity === "CONNECTED" ? "72" : "—");
+    assert.equal(humidityCard.value, expectedHumidity === "Optimal" ? "72" : "—");
   }
 });
 

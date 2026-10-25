@@ -429,7 +429,7 @@ async function render() {
     let [data, pageData] = await withTimeout(Promise.all(requests));
     if (sequence !== renderSequence) return;
     const age = Date.now() - Date.parse(data.updatedAt);
-    if (!data.isMock && Number.isFinite(age) && age > 20_000) {
+    if (!data.isMock && Number.isFinite(age) && age > 65_000) {
       data = { ...data, online: false, stale: true, staleReason: `The last backend sample is ${Math.max(1, Math.floor(age / 1_000))} seconds old.` };
     }
     lastSnapshot = data;

@@ -379,3 +379,36 @@ test("real adapter keeps status and camera data when optional sensor routes are 
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "pH").value, "6.1000");
   assert.deepEqual(calls, ["/api/status", "/api/sensors/latest", "/api/sensors/health"]);
 });
+
+test("SMS settings use the authenticated backend and never put a number in browser storage", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    const payload = url === "/api/session" ? { token: "session-token" }
+      : { sms_enabled: true, recipient_configured: true, recipient_masked: "••••4567", modem_configured: true };
+    return { ok: true, status: 200, json: async () => payload };
+  };
+  const api = new VerdeApi({ fetchImpl });
+  assert.equal((await api.getSmsSettings()).recipient_masked, "••••4567");
+  await api.updateSmsSettings({ smsEnabled: true, recipient: "+639171234567" });
+  assert.deepEqual(calls.map(({ url }) => url), ["/api/gsm/settings", "/api/session", "/api/gsm/settings"]);
+  assert.equal(calls[2].options.headers["X-VERDE-Token"], "session-token");
+  assert.deepEqual(JSON.parse(calls[2].options.body), {
+    sms_enabled: true, recipient: "+639171234567"
+  });
+  await assert.rejects(api.updateSmsSettings({ smsEnabled: true, recipient: "invalid" }), /7–15 digits/);
+  assert.equal(calls.length, 3);
+});
+
+test("SMS settings degrade safely on older backends", async () => {
+  const fetchImpl = async () => ({ ok: false, status: 404, json: async () => ({ error: "Not found" }) });
+  assert.deepEqual(await new VerdeApi({ fetchImpl }).getSmsSettings(), { supported: false });
+});
+
+test("mock SMS settings are separate from the live modem", async () => {
+  const api = new MockVerdeApi({ delay: 0 });
+  assert.equal((await api.getSmsSettings()).sms_enabled, false);
+  await api.updateSmsSettings({ smsEnabled: true, recipient: "+639171234567" });
+  assert.equal((await api.getSmsSettings()).recipient_masked, "••••4567");
+  assert.equal((await api.getSmsSettings()).modem_configured, false);
+});

@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=28";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=28";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=29";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=29";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -204,6 +204,64 @@ function bindInstallButton() {
   button?.addEventListener("click", () => requestPwaInstallation(button));
 }
 
+function showSmsSettingsDialog(settings) {
+  const dialog = document.createElement("dialog");
+  const current = settings.recipient_configured
+    ? `Current recipient: ${safe(settings.recipient_masked || "number saved")}`
+    : "No recipient saved yet.";
+  dialog.innerHTML = `<form id="sms-settings-form">
+    <h2>SMS alert destination</h2>
+    <p>${current} Enter a new number to change it. Saving does not send a test SMS.</p>
+    <label class="sms-field" for="sms-recipient">Mobile number</label>
+    <input id="sms-recipient" name="recipient" type="tel" inputmode="tel" autocomplete="tel"
+      pattern="[+]?[0-9]{7,15}" maxlength="16" placeholder="+639171234567" />
+    <label class="sms-toggle"><input name="sms_enabled" type="checkbox"${settings.sms_enabled ? " checked" : ""} /> Enable SMS alerts for new qualifying events</label>
+    <p class="sms-note">Critical and persistent faulty conditions, critical turbidity, Harvest-Ready, and pest detection are SMS events. Routine temperature and humidity deviations remain dashboard warnings. A service restart may reopen existing incidents.</p>
+    <p class="sms-form-error" role="alert" hidden></p>
+    <div class="dialog-actions"><button type="button" data-sms-cancel class="secondary">Cancel</button><button type="submit" class="primary">Save settings</button></div>
+  </form>`;
+  dialog.addEventListener("close", () => dialog.remove());
+  dialog.querySelector("[data-sms-cancel]").addEventListener("click", () => dialog.close());
+  dialog.querySelector("form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const recipient = form.elements.recipient.value.trim();
+    const smsEnabled = form.elements.sms_enabled.checked;
+    const errorLine = form.querySelector(".sms-form-error");
+    errorLine.hidden = true;
+    if (smsEnabled && !recipient && !settings.recipient_configured) {
+      errorLine.textContent = "Enter a mobile number before enabling SMS alerts.";
+      errorLine.hidden = false;
+      return;
+    }
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    try {
+      await withTimeout(api.updateSmsSettings({ smsEnabled, ...(recipient ? { recipient } : {}) }));
+      dialog.close();
+      showToast("SMS settings saved. No test SMS was sent.");
+      await render();
+    } catch (error) {
+      errorLine.textContent = error?.message || "SMS settings could not be saved.";
+      errorLine.hidden = false;
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
+function bindSmsSettingsButton(settings, data) {
+  document.querySelector("[data-sms-settings]")?.addEventListener("click", () => {
+    if (data.stale || !data.online) {
+      showToast("Reconnect to the backend before changing SMS settings.", "warn");
+      return;
+    }
+    showSmsSettingsDialog(settings);
+  });
+}
+
 function renderDashboard(data) {
   const time = niceTime(data.updatedAt);
   const fusionHeading = /^(High|Medium|Low)$/i.test(data.fusion.confidence)
@@ -356,19 +414,25 @@ function renderAlerts(data, alerts) {
   bindNav();
 }
 
-function renderSettings(data) {
+function renderSettings(data, smsSettings = { supported: false }) {
   const installed = isInstalledPwa();
   const installLabel = installed ? "Installed" : deferredInstallPrompt ? "Install app" : "Installation help";
+  const smsSupported = smsSettings?.supported !== false && typeof smsSettings?.sms_enabled === "boolean";
+  const smsSummary = smsSupported
+    ? `${smsSettings.sms_enabled ? "Enabled" : "Disabled"} · ${smsSettings.recipient_configured ? `Recipient ${smsSettings.recipient_masked || "saved"}` : "No recipient saved"}${smsSettings.modem_configured ? "" : " · GSM port not configured"}`
+    : "Backend SMS settings are unavailable. Update the Pi backend to configure alerts here.";
   const content = `<section class="page-title"><h2>Settings</h2><p>${safe(sourceLabel(data))}</p></section>
     <section class="settings-list">
       <article><div><h2>Backend connection</h2><p>${data.isMock ? "Explicit development adapter; no hardware connection." : "Same-origin connection to the local VERDE service."}</p></div><span>${safe(data.settings.backendLabel)}</span></article>
       <article><div><h2>Install on this device</h2><p>Installation requires the private HTTPS address. Live readings still require a connection to the Raspberry Pi.</p></div><button data-install-button type="button" class="secondary"${installed ? " disabled" : ""}>${installLabel}</button></article>
       <article><div><h2>Operating mode</h2><p>Active: ${safe(data.mode)} · Requested: ${safe(data.requestedMode || data.mode)}. Safety validation is enforced by the backend.</p></div><button data-mode-button type="button" class="secondary">Change mode</button></article>
+      <article><div><h2>GSM SMS alerts</h2><p>${safe(smsSummary)}</p><p>Modem: ${safe(data.settings.gsmStatus || "Unavailable")}. The number is stored on the Pi, not in this browser. Changing it does not send a message.</p></div>${smsSupported ? '<button data-sms-settings type="button" class="secondary">Configure</button>' : ""}</article>
       <article><div><h2>Application version</h2><p>VERDE monitoring PWA</p></div><span>${safe(data.settings.version)}</span></article>
     </section>`;
   app.innerHTML = renderShell(content, data);
   bindModeButton(data);
   bindInstallButton();
+  if (smsSupported) bindSmsSettingsButton(smsSettings, data);
   bindNav();
 }
 
@@ -426,6 +490,7 @@ async function render() {
     const requests = [api.getSnapshot()];
     if (activePage === "History") requests.push(api.getHistory(historyRange, historyMetric));
     if (activePage === "Alerts") requests.push(api.getAlerts());
+    if (activePage === "Settings") requests.push(api.getSmsSettings());
     let [data, pageData] = await withTimeout(Promise.all(requests));
     if (sequence !== renderSequence) return;
     const age = Date.now() - Date.parse(data.updatedAt);
@@ -438,7 +503,7 @@ async function render() {
     if (activePage === "Plants") renderPlants(data);
     else if (activePage === "History") renderHistory(data, pageData);
     else if (activePage === "Alerts") renderAlerts(data, pageData);
-    else if (activePage === "Settings") renderSettings(data);
+    else if (activePage === "Settings") renderSettings(data, pageData);
     else renderDashboard(data);
     renderedPage = activePage;
   } catch (error) {
@@ -450,7 +515,7 @@ async function render() {
       if (activePage === "Plants") renderPlants(staleData);
       else if (activePage === "History") renderHistory(staleData, cachedPageData);
       else if (activePage === "Alerts") renderAlerts(staleData, cachedPageData);
-      else if (activePage === "Settings") renderSettings(staleData);
+      else if (activePage === "Settings") renderSettings(staleData, cachedPageData);
       else renderDashboard(staleData);
       renderedPage = activePage;
     } else {
@@ -471,19 +536,19 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) rend
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   deferredInstallPrompt = event;
-  if (activePage === "Settings" && lastSnapshot) renderSettings(lastSnapshot);
+  if (activePage === "Settings" && lastSnapshot) renderSettings(lastSnapshot, lastPageData.get("Settings"));
 });
 window.addEventListener("appinstalled", () => {
   deferredInstallPrompt = null;
   showToast("VERDE was installed successfully.");
-  if (activePage === "Settings" && lastSnapshot) renderSettings(lastSnapshot);
+  if (activePage === "Settings" && lastSnapshot) renderSettings(lastSnapshot, lastPageData.get("Settings"));
 });
 
 if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=28", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=29", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

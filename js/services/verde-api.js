@@ -408,6 +408,8 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
     settings: {
       backendConnected: true,
       backendLabel: sensorHealth?.status ? `Sensors ${sensorHealth.status}` : "Connected locally",
+      gsmStatus: state.gsm?.status ?? "UNAVAILABLE",
+      gsmDetail: state.gsm?.detail ?? "GSM status unavailable",
       version: `v${state.version ?? "0.1"}`
     }
   };
@@ -576,6 +578,35 @@ export class VerdeApi {
     return normalizeBackendEvents(payload?.rows);
   }
 
+  async getSmsSettings() {
+    const settings = await this.optionalRequest("/api/gsm/settings");
+    return settings ?? { supported: false };
+  }
+
+  async updateSmsSettings({ smsEnabled, recipient = undefined }) {
+    if (typeof smsEnabled !== "boolean") throw new Error("Choose whether SMS alerts are enabled.");
+    if (recipient !== undefined && !/^\+?[0-9]{7,15}$/.test(recipient)) {
+      throw new Error("Enter 7–15 digits with an optional leading +.");
+    }
+    const body = { sms_enabled: smsEnabled };
+    if (recipient !== undefined) body.recipient = recipient;
+    const post = async (refreshToken = false) => this.request("/api/gsm/settings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-VERDE-Token": await this.sessionToken(refreshToken)
+      },
+      body: JSON.stringify(body)
+    });
+    try {
+      return await post(false);
+    } catch (error) {
+      if (error.status !== 403) throw error;
+      this.token = null;
+      return post(true);
+    }
+  }
+
   async sessionToken(forceRefresh = false) {
     if (!this.token || forceRefresh) this.token = (await this.request("/api/session")).token;
     if (!this.token) throw new Error("The VERDE backend did not provide a session token.");
@@ -641,6 +672,8 @@ export class MockVerdeApi {
     this.shouldFail = Boolean(shouldFail);
     this.online = Boolean(online);
     this.mode = "Full Automation";
+    this.smsSettings = { sms_enabled: false, recipient_configured: false,
+      recipient_masked: null, modem_configured: false, supported: true };
   }
 
   async respond(value) {
@@ -694,6 +727,8 @@ export class MockVerdeApi {
       settings: {
         backendConnected: false,
         backendLabel: "Mock adapter",
+        gsmStatus: "MOCK — NO MODEM",
+        gsmDetail: "No SMS is sent in mock mode",
         version: "v0.3"
       }
     });
@@ -713,6 +748,25 @@ export class MockVerdeApi {
 
   async getAlerts() {
     return this.respond(normalizeBackendEvents(mockEventRows()));
+  }
+
+  async getSmsSettings() {
+    return this.respond(this.smsSettings);
+  }
+
+  async updateSmsSettings({ smsEnabled, recipient = undefined }) {
+    if (typeof smsEnabled !== "boolean") throw new Error("Choose whether SMS alerts are enabled.");
+    if (recipient !== undefined && !/^\+?[0-9]{7,15}$/.test(recipient)) {
+      throw new Error("Enter 7–15 digits with an optional leading +.");
+    }
+    await this.respond(null);
+    if (recipient !== undefined) {
+      this.smsSettings.recipient_configured = true;
+      this.smsSettings.recipient_masked = `••••${recipient.slice(-4)}`;
+    }
+    if (smsEnabled && !this.smsSettings.recipient_configured) throw new Error("Enter a recipient number first.");
+    this.smsSettings.sms_enabled = smsEnabled;
+    return copy(this.smsSettings);
   }
 
   async requestModeChange(mode) {

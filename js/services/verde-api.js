@@ -231,6 +231,25 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
     const value = liveSensorValue(key, sensor);
     const healthKey = key;
     const healthStatus = health?.sensors?.[healthKey];
+    // The A0 signal is useful for diagnosis even when the old A3 NTU
+    // calibration is rejected. Never present this voltage as NTU.
+    const calibrationUnavailable = key === "turbidity" && value === null
+      && /calibration/i.test(String(sensor.status ?? ""))
+      && (!healthStatus || /calibration/i.test(String(sensorHealthStatus(healthStatus))));
+    const rawVoltage = calibrationUnavailable
+      ? finiteNumber(sensor.filtered_voltage_V ?? sensor.raw_voltage_V)
+      : null;
+    if (rawVoltage !== null && rawVoltage >= 0) {
+      return {
+        ...presentation,
+        value: rawVoltage.toFixed(4),
+        unit: "V",
+        status: "Uncalibrated signal",
+        detail: "ADS1115 A0 voltage only · not NTU; sensor connection not verified",
+        isRaw: true,
+        lastReadingAt: payload.timestamp ?? health?.timestamp ?? null
+      };
+    }
     const faulty = isFaultySensorReading(key, value, sensor, healthStatus);
     return {
       ...presentation,

@@ -132,6 +132,10 @@ EC/TDS and turbidity cards show the live electrical voltage together with
 `CONNECTED — CALIBRATION REQUIRED`. Raw volts are not relabeled as calibrated
 pH, mS/cm, ppm or NTU values.
 
+When the turbidity backend rejects an incompatible calibration but still provides
+an A0 voltage, the turbidity card shows that live voltage as an uncalibrated
+signal in V. It does not report NTU or claim that the probe is connected.
+
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 
 ## Development workflow across computers

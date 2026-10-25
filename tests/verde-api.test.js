@@ -61,6 +61,30 @@ test("a valid live value without a status remains visible; explicit faults still
   assert.equal(withFault.find((item) => item.label === "EC").status, "Faulty Sensors");
 });
 
+test("A0 voltage remains visible when only the old A3 NTU calibration is invalid", () => {
+  const health = { sensors: { turbidity: "UNAVAILABLE: accepted turbidity calibration record is missing or invalid" } };
+  const sensor = {
+    value_ntu: null,
+    status: health.sensors.turbidity,
+    calibration_error: "turbidity calibration is not for ADS1115 A0",
+    raw_voltage_V: 0.072125,
+    filtered_voltage_V: 0.072
+  };
+  const reading = normalizeLiveSensorSnapshot({ sensors: { turbidity: sensor } }, health)
+    .find((item) => item.label === "Turbidity");
+  assert.equal(reading.value, "0.0720");
+  assert.equal(reading.unit, "V");
+  assert.equal(reading.status, "Uncalibrated signal");
+  assert.equal(reading.isRaw, true);
+  assert.match(reading.detail, /not NTU/);
+
+  const disconnected = normalizeLiveSensorSnapshot({ sensors: { turbidity: sensor } },
+    { sensors: { turbidity: "NOT CONNECTED" } })
+    .find((item) => item.label === "Turbidity");
+  assert.equal(disconnected.status, "Faulty Sensors");
+  assert.equal(disconnected.value, "—");
+});
+
 test("snapshot contains complete mock dashboard, plant, fusion, and settings data", async () => {
   const api = new MockVerdeApi({ delay: 0 });
   const snapshot = await api.getSnapshot();

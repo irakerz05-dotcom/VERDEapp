@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=27";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=27";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=28";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=28";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -430,7 +430,7 @@ async function render() {
     if (sequence !== renderSequence) return;
     const age = Date.now() - Date.parse(data.updatedAt);
     if (!data.isMock && Number.isFinite(age) && age > 65_000) {
-      data = { ...data, online: false, stale: true, staleReason: `The last backend sample is ${Math.max(1, Math.floor(age / 1_000))} seconds old.` };
+      data = markSnapshotStale(data, `The last backend sample is ${Math.max(1, Math.floor(age / 1_000))} seconds old.`);
     }
     lastSnapshot = data;
     if (pageData !== undefined) lastPageData.set(activePage, pageData);
@@ -446,7 +446,7 @@ async function render() {
     const cachedPageData = lastPageData.get(activePage);
     const pageNeedsData = activePage === "History" || activePage === "Alerts";
     if (lastSnapshot && (!pageNeedsData || cachedPageData !== undefined)) {
-      const staleData = { ...lastSnapshot, online: false, stale: true, staleReason: error?.message || "The backend could not be refreshed." };
+      const staleData = markSnapshotStale(lastSnapshot, error?.message || "The backend could not be refreshed.");
       if (activePage === "Plants") renderPlants(staleData);
       else if (activePage === "History") renderHistory(staleData, cachedPageData);
       else if (activePage === "Alerts") renderAlerts(staleData, cachedPageData);
@@ -483,7 +483,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=27", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=28", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

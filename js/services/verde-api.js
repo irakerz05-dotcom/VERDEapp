@@ -198,6 +198,18 @@ function sensorHealthStatus(healthStatus) {
   return healthStatus ?? "";
 }
 
+function sensorSnapshotOrder(payload, health) {
+  const latestSample = finiteNumber(payload?.system?.sample);
+  const healthSample = finiteNumber(health?.sample);
+  if (latestSample !== null && healthSample !== null) {
+    return Math.sign(latestSample - healthSample);
+  }
+  const latestTime = Date.parse(payload?.timestamp ?? "");
+  const healthTime = Date.parse(health?.timestamp ?? "");
+  return Number.isFinite(latestTime) && Number.isFinite(healthTime)
+    ? Math.sign(latestTime - healthTime) : 0;
+}
+
 function isUnbelievableSensorValue(key, value) {
   const maximum = SENSOR_DISPLAY_LIMITS[key]?.maximum;
   return value !== null && maximum !== undefined && value > maximum;
@@ -226,11 +238,36 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
     }));
   }
 
+  const order = sensorSnapshotOrder(payload, health);
   return Object.entries(SENSOR_PRESENTATION).map(([key, presentation]) => {
     const sensor = source[key] && typeof source[key] === "object" ? source[key] : {};
     const value = liveSensorValue(key, sensor);
     const healthKey = key;
-    const healthStatus = health?.sensors?.[healthKey];
+    const healthStatus = order > 0 ? null : health?.sensors?.[healthKey];
+    if (order < 0) {
+      const status = String(sensorHealthStatus(healthStatus));
+      return {
+        ...presentation,
+        value: "—",
+        unit: liveSensorUnit(key, sensor),
+        status: /recovering/i.test(status) ? "Recovering"
+          : HARDWARE_FAULT_STATUS.test(status) ? "Faulty Sensors" : "Stale",
+        detail: "Sensor health is newer than the last reading; waiting for a matching sample.",
+        isRaw: false,
+        lastReadingAt: payload.timestamp ?? null
+      };
+    }
+    if (value === null && /recovering/i.test(String(sensor.status ?? sensorHealthStatus(healthStatus)))) {
+      return {
+        ...presentation,
+        value: "—",
+        unit: liveSensorUnit(key, sensor),
+        status: "Recovering",
+        detail: String(sensor.read_error ?? sensor.status ?? "Retrying the sensor read."),
+        isRaw: false,
+        lastReadingAt: sensor.read_timestamp ?? payload.timestamp ?? null
+      };
+    }
     // The A0 signal is useful for diagnosis even when the old A3 NTU
     // calibration is rejected. Never present this voltage as NTU.
     const calibrationUnavailable = key === "turbidity" && value === null
@@ -258,9 +295,25 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
       status: faulty ? "Faulty Sensors" : sensorStatus({ value, raw_value: sensor.raw_value, status: liveSensorBadge(key, sensor, value) }),
       detail: faulty ? "" : liveSensorDetail(key, sensor, health?.sensors?.[healthKey]),
       isRaw: false,
-      lastReadingAt: payload.timestamp ?? health?.timestamp ?? null
+      lastReadingAt: sensor.read_timestamp ?? payload.timestamp ?? health?.timestamp ?? null
     };
   });
+}
+
+export function markSnapshotStale(snapshot, reason) {
+  return {
+    ...snapshot,
+    online: false,
+    stale: true,
+    staleReason: reason,
+    sensors: (snapshot.sensors ?? []).map((sensor) => ({
+      ...sensor,
+      value: "—",
+      status: "Stale",
+      detail: `No current reading. Last status: ${sensor.status}.`,
+      isRaw: false
+    }))
+  };
 }
 
 function hasSensorOutput(sensor) {

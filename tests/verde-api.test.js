@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   MockVerdeApi,
   VerdeApi,
+  markSnapshotStale,
   normalizeBackendEvents,
   normalizeBackendHistory,
   normalizeBackendSnapshot,
@@ -83,6 +84,72 @@ test("A0 voltage remains visible when only the old A3 NTU calibration is invalid
     .find((item) => item.label === "Turbidity");
   assert.equal(disconnected.status, "Faulty Sensors");
   assert.equal(disconnected.value, "—");
+});
+
+test("water temperature and humidity fail and recover independently", () => {
+  const liveWater = { value_C: 25.125, status: "OK: DS18B20" };
+  const liveHumidity = { value: 72, status: "CONNECTED: DHT11" };
+  const failedWater = { value_C: null, status: "ERROR: CRC failure", read_error: "CRC failure" };
+  const failedHumidity = { value: null, status: "ERROR: incomplete buffer", read_error: "incomplete buffer" };
+  const cases = [
+    [failedWater, failedHumidity, "Faulty Sensors", "Faulty Sensors"],
+    [failedWater, liveHumidity, "Faulty Sensors", "CONNECTED"],
+    [liveWater, failedHumidity, "CONNECTED", "Faulty Sensors"],
+    [liveWater, liveHumidity, "CONNECTED", "CONNECTED"],
+    [liveWater, failedHumidity, "CONNECTED", "Faulty Sensors"]
+  ];
+  for (const [water, humidity, expectedWater, expectedHumidity] of cases) {
+    const readings = normalizeLiveSensorSnapshot({
+      system: { sample: 42 },
+      sensors: { water_temperature: water, ambient_humidity: humidity }
+    });
+    const temperatureCard = readings.find((item) => item.label === "Water Temperature");
+    const humidityCard = readings.find((item) => item.label === "Humidity");
+    assert.equal(temperatureCard.status, expectedWater);
+    assert.equal(humidityCard.status, expectedHumidity);
+    assert.equal(temperatureCard.value, expectedWater === "CONNECTED" ? "25.125" : "—");
+    assert.equal(humidityCard.value, expectedHumidity === "CONNECTED" ? "72" : "—");
+  }
+});
+
+test("transient retries and different sample generations never expose old values as live", () => {
+  const recovering = normalizeLiveSensorSnapshot({ sensors: {
+    water_temperature: { value_C: null, status: "RECOVERING: CRC failure", read_error: "CRC failure" },
+    ambient_humidity: { value: 70, status: "CONNECTED" }
+  } });
+  assert.equal(recovering.find((item) => item.label === "Water Temperature").status, "Recovering");
+  assert.equal(recovering.find((item) => item.label === "Water Temperature").value, "—");
+  assert.equal(recovering.find((item) => item.label === "Humidity").value, "70");
+
+  const latest = { system: { sample: 43 }, sensors: {
+    water_temperature: { value_C: 25, status: "OK" },
+    ambient_humidity: { value: 72, status: "CONNECTED" }
+  } };
+  const olderHealth = { sample: 42, sensors: {
+    water_temperature: "ERROR: CRC failure", ambient_humidity: "ERROR: incomplete buffer"
+  } };
+  const current = normalizeLiveSensorSnapshot(latest, olderHealth);
+  assert.equal(current.find((item) => item.label === "Water Temperature").value, "25");
+  assert.equal(current.find((item) => item.label === "Humidity").value, "72");
+
+  const newerHealth = { sample: 44, sensors: { water_temperature: "ERROR: CRC failure", ambient_humidity: "CONNECTED" } };
+  const incoherent = normalizeLiveSensorSnapshot(latest, newerHealth);
+  assert.equal(incoherent.find((item) => item.label === "Water Temperature").status, "Faulty Sensors");
+  assert.equal(incoherent.find((item) => item.label === "Water Temperature").value, "—");
+  assert.equal(incoherent.find((item) => item.label === "Humidity").status, "Stale");
+  assert.equal(incoherent.find((item) => item.label === "Humidity").value, "—");
+});
+
+test("a stale dashboard hides old numbers and records their previous state", () => {
+  const stale = markSnapshotStale({ online: true, sensors: [
+    { label: "Water Temperature", value: "25.125", unit: "°C", status: "CONNECTED" },
+    { label: "Humidity", value: "—", unit: "%", status: "Faulty Sensors" }
+  ] }, "Backend timed out");
+  assert.equal(stale.online, false);
+  assert.equal(stale.stale, true);
+  assert.deepEqual(stale.sensors.map((sensor) => sensor.status), ["Stale", "Stale"]);
+  assert.deepEqual(stale.sensors.map((sensor) => sensor.value), ["—", "—"]);
+  assert.match(stale.sensors[1].detail, /Faulty Sensors/);
 });
 
 test("snapshot contains complete mock dashboard, plant, fusion, and settings data", async () => {

@@ -27,6 +27,9 @@ CONFIG_PATH = Path("/home/verde/VERDE-Sensor-Integration/config.local.json")
 API = "http://127.0.0.1:8000/api/sensors/latest"
 SAMPLES = 5
 MAX_WAIT_SECONDS = 210
+# ADS1115 VDD is 3.3 V on this Pi. Leave a small capture margin below VDD;
+# this check cannot protect against later sensor output excursions.
+MAX_CAPTURE_V = 3.29
 
 
 def verify_service_source(path=SERVICE_SOURCE, channel="A0"):
@@ -74,7 +77,7 @@ def validate_snapshot(payload, now=None, channel="A0"):
         value = sensor.get(name)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             raise ValueError(f"{channel} {name} is unavailable")
-        if not 0.01 < value < 3.0:
+        if not 0.01 < value < MAX_CAPTURE_V:
             raise ValueError(f"{channel} {name}={value} V is outside the guarded capture range")
         values[name] = float(value)
     return {"sample": sample, "timestamp": payload["timestamp"], **values}
@@ -183,6 +186,8 @@ def main():
     current = validate_snapshot(read_snapshot(), channel=args.channel)
     threshold = local_critical_limit()
     print(f"Current {args.channel}: {current['filtered_voltage_V']:.6f} V; sample #{current['sample']}")
+    if current["raw_voltage_V"] > 3.0:
+        print(f"{args.channel} is close to the 3.3 V ADC supply; later higher sensor voltages are not protected by this script.")
     print(f"Configured critical turbidity threshold: {threshold!r}")
     if threshold is not None:
         print("Note: estimated NTU can influence the configured critical alert and safety override.")

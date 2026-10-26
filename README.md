@@ -158,6 +158,10 @@ deploy/calibrate_pi_turbidity_a0.py --channel A3 --apply`; the old A0 record is
 backed up. Restart the service to load the A3 record. If A3 exceeds the
 guarded range, stop: no reference is written. The new probe cannot inherit
 the old probe's reference.
+The A3 capture guard rejects raw or filtered samples at or above 3.29 V,
+slightly below this Pi's 3.3 V ADC supply. A reading close to that limit is
+only a software observation; it does not establish that the sensor output
+will stay within the ADC's input limits in other water samples.
 
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 

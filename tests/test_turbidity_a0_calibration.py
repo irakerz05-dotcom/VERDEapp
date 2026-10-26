@@ -78,6 +78,15 @@ class TurbidityReferenceTests(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text())["ads_channel"], "A3")
             self.assertEqual(json.loads(backup.read_text()), old)
 
+    def test_a3_near_supply_capture_has_strict_upper_bound(self):
+        reading = validate_snapshot(self.snapshot(raw=3.282875, filtered=3.282875),
+                                    channel="A3")
+        self.assertAlmostEqual(reading["raw_voltage_V"], 3.282875)
+        for voltage in (3.29, 3.3, 3.6705):
+            with self.assertRaisesRegex(ValueError, "guarded capture range"):
+                validate_snapshot(self.snapshot(raw=voltage, filtered=voltage),
+                                  channel="A3")
+
 
 if __name__ == "__main__":
     unittest.main()

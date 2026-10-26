@@ -6,7 +6,12 @@ from collections import Counter
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from deploy.apply_pi_sensor_recovery import MARKER, REPLACEMENTS, build_updated_source
+from deploy.apply_pi_sensor_recovery import (
+    MARKER,
+    REPLACEMENTS,
+    build_updated_source,
+    validate_installed_source,
+)
 
 
 class PiSensorRecoveryPatchTests(unittest.TestCase):
@@ -66,6 +71,12 @@ class PiSensorRecoveryPatchTests(unittest.TestCase):
             build_updated_source("unrelated source")
         with self.assertRaisesRegex(ValueError, "already appears"):
             build_updated_source(MARKER)
+
+    def test_reapplying_a_valid_patch_is_a_successful_no_op(self):
+        with patch("builtins.compile") as compile_mock:
+            self.assertTrue(validate_installed_source(f"{MARKER}\nvalid = True\n"))
+        compile_mock.assert_called_once()
+        self.assertFalse(validate_installed_source("unpatched source"))
 
     def test_inserted_methods_and_exception_handler_are_valid_python(self):
         methods = next(new for label, _, new in REPLACEMENTS if label == "retry methods")

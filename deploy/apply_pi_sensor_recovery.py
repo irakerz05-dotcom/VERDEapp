@@ -222,6 +222,14 @@ def build_updated_source(source):
     return source
 
 
+def validate_installed_source(source):
+    """Validate an already-patched source without attempting a second patch."""
+    if MARKER not in source:
+        return False
+    compile(source, str(TARGET), "exec")
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group(required=True)
@@ -231,6 +239,10 @@ def main():
     args = parser.parse_args()
     target = args.target.resolve(strict=True)
     original = target.read_text(encoding="utf-8")
+    if validate_installed_source(original):
+        action = "check" if args.check else "apply"
+        print(f"Already installed: {target}; sensor recovery patch is valid; no files changed ({action})")
+        return
     updated = build_updated_source(original)
     if args.check:
         print(f"Ready: {target}; {len(REPLACEMENTS)} guarded edits; syntax valid; no files changed")

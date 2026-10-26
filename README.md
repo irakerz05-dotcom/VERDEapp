@@ -167,6 +167,13 @@ installer with `--channel A0 --check`, then `--channel A0 --apply`. Restart
 `verde.service` and run the calibration capture with `--channel A0`. The A3
 reference is backed up before the new A0 reference is saved; do not reuse the
 old A0 reference from a different probe.
+When A0 reports an out-of-range voltage near the operator's designated
+drinking-water sample on 2026-10-26 (3.606875 V ±0.08 V), the dashboard may show an
+**ASSIGNED / UNVERIFIED** 1.0 NTU annotation. This is display-only: the Pi
+still reports the sensor unavailable, and its safety, history, SMS and
+sensor-vision fusion paths do not receive an NTU reading from this assignment.
+The annotation expires the next day so it cannot silently follow the probe
+into another water sample.
 
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 

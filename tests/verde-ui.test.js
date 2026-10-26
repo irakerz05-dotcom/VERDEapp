@@ -42,17 +42,17 @@ test("service-worker assets match versioned index and module references", async 
     readFile(`${root}js/app.js`, "utf8")
   ]);
 
-  assert.match(index, /href="styles\.css\?v=38"/);
-  assert.match(index, /src="js\/app\.js\?v=38"/);
-  assert.match(app, /services\/verde-api\.js\?v=38/);
-  assert.match(app, /verde-ui\.js\?v=38/);
+  assert.match(index, /href="styles\.css\?v=39"/);
+  assert.match(index, /src="js\/app\.js\?v=39"/);
+  assert.match(app, /services\/verde-api\.js\?v=39/);
+  assert.match(app, /verde-ui\.js\?v=39/);
   assert.match(app, /sensor-detail/);
   assert.match(app, /Problem timeline/);
   assert.match(app, /Alerts & activity/);
-  assert.match(worker, /"\.\/styles\.css\?v=38"/);
-  assert.match(worker, /"\.\/js\/app\.js\?v=38"/);
-  assert.match(worker, /"\.\/js\/verde-ui\.js\?v=38"/);
-  assert.match(worker, /"\.\/js\/services\/verde-api\.js\?v=38"/);
+  assert.match(worker, /"\.\/styles\.css\?v=39"/);
+  assert.match(worker, /"\.\/js\/app\.js\?v=39"/);
+  assert.match(worker, /"\.\/js\/verde-ui\.js\?v=39"/);
+  assert.match(worker, /"\.\/js\/services\/verde-api\.js\?v=39"/);
   assert.match(worker, /caches\.delete/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);
   assert.match(app, /updateViaCache: "none"/);

@@ -104,6 +104,32 @@ test("A0 voltage remains visible when only the old A3 NTU calibration is invalid
   assert.equal(disconnected.value, "—");
 });
 
+test("operator-assigned drinking-water NTU stays display-only and unverified", () => {
+  const sensor = {
+    value_ntu: null,
+    status: "UNAVAILABLE: accepted turbidity calibration record is missing or invalid",
+    filtered_voltage_V: 3.606875,
+    raw_voltage_V: 3.613375
+  };
+  const payload = { timestamp: "2026-10-26T22:15:00+08:00", sensors: { turbidity: sensor } };
+  const assigned = normalizeLiveSensorSnapshot(payload).find((item) => item.label === "Turbidity");
+  assert.equal(assigned.value, "1.0000");
+  assert.equal(assigned.unit, "NTU");
+  assert.equal(assigned.status, "ASSIGNED / UNVERIFIED");
+  assert.equal(assigned.isRaw, true);
+  assert.equal(payload.sensors.turbidity.value_ntu, null);
+
+  const changed = normalizeLiveSensorSnapshot({ timestamp: payload.timestamp, sensors: { turbidity: {
+    ...sensor, filtered_voltage_V: 3.5
+  } } }).find((item) => item.label === "Turbidity");
+  assert.equal(changed.unit, "V");
+  assert.equal(changed.status, "Uncalibrated signal");
+
+  const nextDay = normalizeLiveSensorSnapshot({ ...payload,
+    timestamp: "2026-10-27T00:01:00+08:00" }).find((item) => item.label === "Turbidity");
+  assert.equal(nextDay.unit, "V");
+});
+
 test("a project-reference NTU reading remains numeric with metadata retained", () => {
   const sensor = { value_ntu: 1.0, status: "CALIBRATED", classification: "OPTIMAL",
     reference_voltage_V: 0.5762, raw_voltage_V: 0.5761, filtered_voltage_V: 0.5762 };

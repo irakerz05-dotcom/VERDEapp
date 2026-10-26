@@ -129,6 +129,11 @@ const HARDWARE_FAULT_STATUS = /fault|error|not\s*connected|disconnected|offline|
 const SENSOR_DISPLAY_LIMITS = { ph: { maximum: 15 } };
 const HUMIDITY_OPTIMAL_MIN = 65;
 const HUMIDITY_OPTIMAL_MAX = 78;
+// UI-only annotation for the drinking-water sample the operator designated
+// 1.0 NTU on 2026-10-26. The backend keeps this A0 input unavailable.
+const ASSIGNED_A0_REFERENCE_V = 3.606875;
+const ASSIGNED_A0_REFERENCE_TOLERANCE_V = 0.08;
+const ASSIGNED_A0_REFERENCE_DATE = "2026-10-26";
 
 const DISPLAY_TO_BACKEND_MODE = {
   "Full Automation": "Full Automation Mode",
@@ -275,14 +280,28 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
         lastReadingAt: sensor.read_timestamp ?? payload.timestamp ?? null
       };
     }
-    // The A0 signal is useful for diagnosis even when the old A3 NTU
-    // calibration is rejected. Never present this voltage as NTU.
+    // The A0 signal is useful for diagnosis even when the A3 NTU calibration
+    // is rejected. A narrow match to the operator's drinking-water sample is
+    // displayed as an assignment only; it is never a backend sensor value.
     const calibrationUnavailable = key === "turbidity" && value === null
       && /calibration/i.test(String(sensor.status ?? ""))
       && (!healthStatus || /calibration/i.test(String(sensorHealthStatus(healthStatus))));
     const rawVoltage = calibrationUnavailable
       ? finiteNumber(sensor.filtered_voltage_V ?? sensor.raw_voltage_V)
       : null;
+    if (rawVoltage !== null
+        && String(payload.timestamp ?? "").startsWith(ASSIGNED_A0_REFERENCE_DATE)
+        && Math.abs(rawVoltage - ASSIGNED_A0_REFERENCE_V) <= ASSIGNED_A0_REFERENCE_TOLERANCE_V) {
+      return {
+        ...presentation,
+        value: "1.0000",
+        unit: "NTU",
+        status: "ASSIGNED / UNVERIFIED",
+        detail: "Drinking-water reference assigned by the project; not a validated sensor reading.",
+        isRaw: true,
+        lastReadingAt: payload.timestamp ?? health?.timestamp ?? null
+      };
+    }
     if (rawVoltage !== null && rawVoltage >= 0) {
       return {
         ...presentation,

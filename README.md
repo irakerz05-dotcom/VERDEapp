@@ -138,6 +138,24 @@ signal in V. It does not report NTU or claim that the probe is connected.
 
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 
+## NFT planting records
+
+The Plants page has 12 fixed positions: top NFT row Plant 1–6 from right to
+left, bottom NFT row Plant 7–12 from right to left. Select a position on the
+camera image or in the slot grid to enter a planting date. The Pi stores dates
+in its existing SQLite database and calculates the days growing. Swap moves
+two saved dates when plants are physically moved; erase clears a date for a
+replacement plant. Camera detection boxes do not establish plant identity,
+and planting age does not automatically change the experimental AI result.
+
+On the Pi, fetch `feature/planting-slots` in VERDE-Software and pull this PWA
+branch. Then run `python3 deploy/apply_pi_plant_slots.py --check` followed by
+`python3 deploy/apply_pi_plant_slots.py --apply` from `~/VERDEapp`.
+The installer backs up the existing backend web module. Restart
+`verde.service` at a safe time because its restart can briefly set actuators
+SAFE/OFF and may reopen SMS incidents. Afterward, check
+`http://127.0.0.1:8000/api/plant-slots` on the Pi.
+
 ## Development workflow across computers
 
 GitHub is the source of truth. Before switching computers, commit and push your finished work:

@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=30";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=30";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=31";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=31";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -284,11 +284,71 @@ function renderDashboard(data) {
   bindNav();
 }
 
-function renderPlants(data) {
+function plantAge(slot) {
+  return slot?.daysGrowing === null || slot?.daysGrowing === undefined
+    ? "Set date" : `${slot.daysGrowing} day${slot.daysGrowing === 1 ? "" : "s"}`;
+}
+
+function plantSlotRow(slots, first, overlay = false) {
+  return `<div class="nft-slot-row${overlay ? " overlay-row" : ""}">${Array.from({ length: 6 }, (_, index) => first + index).map((number) => {
+    const slot = slots?.slots?.[number - 1];
+    return `<button type="button" class="nft-slot${slot?.plantedOn ? " planted" : ""}" data-plant-slot="${number}" aria-label="Plant ${number}, ${safe(plantAge(slot))}" ${slots?.supported ? "" : "disabled"}><strong>P${number}</strong><small>${safe(plantAge(slot))}</small></button>`;
+  }).join("")}</div>`;
+}
+
+function showPlantSlotDialog(slot, slots) {
+  const dialog = document.createElement("dialog");
+  dialog.innerHTML = `<form id="plant-slot-form"><h2>Plant ${slot.slot}</h2>
+    <p>This date belongs to the plant in NFT slot ${slot.slot}. Update it when you plant or move lettuce.</p>
+    <label for="plant-date">Date planted</label><input id="plant-date" name="planted_on" type="date" required max="${safe(slots.asOf || "")}" value="${safe(slot.plantedOn || "")}" />
+    <label for="plant-swap">Swap with another slot</label><select id="plant-swap" name="swap"><option value="">Choose a slot</option>${slots.slots.filter((item) => item.slot !== slot.slot).map((item) => `<option value="${item.slot}">Plant ${item.slot} · ${safe(plantAge(item))}</option>`).join("")}</select>
+    <p class="plant-slot-error" role="alert" hidden></p>
+    <div class="dialog-actions"><button type="button" class="secondary" data-plant-cancel>Cancel</button><button type="button" class="secondary" data-plant-clear ${slot.plantedOn ? "" : "disabled"}>Erase date</button><button type="button" class="secondary" data-plant-swap>Swap dates</button><button type="submit" class="primary">Save date</button></div></form>`;
+  const form = dialog.querySelector("form");
+  const errorLine = form.querySelector(".plant-slot-error");
+  const save = async (change, message) => {
+    form.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+    errorLine.hidden = true;
+    try {
+      const updated = await withTimeout(api.updatePlantSlots(change));
+      lastPageData.set("Plants", updated);
+      dialog.close();
+      await render();
+      showToast(message);
+    } catch (error) {
+      errorLine.textContent = error?.message || "Could not save the planting record.";
+      errorLine.hidden = false;
+      form.querySelectorAll("button").forEach((button) => { button.disabled = false; });
+      form.querySelector("[data-plant-clear]").disabled = !slot.plantedOn;
+    }
+  };
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    save({ operation: "set", slot: slot.slot, planted_on: form.elements.planted_on.value }, `Plant ${slot.slot} date saved.`);
+  });
+  form.querySelector("[data-plant-clear]").addEventListener("click", () => {
+    if (window.confirm(`Erase the planting date for Plant ${slot.slot}?`)) save({ operation: "clear", slot: slot.slot }, `Plant ${slot.slot} date erased.`);
+  });
+  form.querySelector("[data-plant-swap]").addEventListener("click", () => {
+    const second = Number(form.elements.swap.value);
+    if (!Number.isInteger(second) || second < 1 || second > 12 || second === slot.slot) {
+      errorLine.textContent = "Choose another slot to swap with.";
+      errorLine.hidden = false;
+      return;
+    }
+    if (window.confirm(`Swap saved dates for Plant ${slot.slot} and Plant ${second}? Move the physical plants to match.`)) save({ operation: "swap", first: slot.slot, second }, "Planting dates swapped.");
+  });
+  form.querySelector("[data-plant-cancel]").addEventListener("click", () => dialog.close());
+  dialog.addEventListener("close", () => dialog.remove());
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
+function renderPlants(data, slots = null) {
   const conditionTone = statusClass(data.plant.condition);
   const frameUrl = safeResourceUrl(data.plant.frameUrl, window.location.href);
   const camera = frameUrl
-    ? `<figure class="camera-frame"><img src="${safe(frameUrl)}" alt="${data.plant.aiAnnotated ? "Latest AI-annotated plant detection frame" : "Latest camera frame"}" />${data.plant.aiAnnotated ? `<figcaption><b>Experimental AI overlay</b><span>Boxes and confidence come from the latest completed two-stage YOLO analysis.</span></figcaption>` : ""}</figure>`
+    ? `<figure class="camera-frame"><div class="nft-camera"><img src="${safe(frameUrl)}" alt="${data.plant.aiAnnotated ? "Latest AI-annotated plant detection frame" : "Latest camera frame"}" />${slots?.supported ? `<div class="nft-camera-labels"><div class="nft-camera-row top">${plantSlotRow(slots, 1, true)}</div><div class="nft-camera-row bottom">${plantSlotRow(slots, 7, true)}</div></div>` : ""}</div>${data.plant.aiAnnotated ? `<figcaption><b>Experimental AI overlay</b><span>Boxes and confidence come from the latest completed two-stage YOLO analysis.</span></figcaption>` : ""}</figure>`
     : `<section class="camera-placeholder" aria-label="Latest camera frame unavailable"><span aria-hidden="true">▧</span><h2>${data.plant.cameraStatus === "Faulty Camera" ? "Faulty Camera" : "Camera frame unavailable"}</h2><p>${safe(data.plant.cameraStatus || "No camera capture is available.")}</p></section>`;
   const pestKnown = typeof data.plant.pestDetected === "boolean";
   const classificationCards = (data.plant.classifications ?? []).map((classification) => {
@@ -303,10 +363,18 @@ function renderPlants(data) {
   }).join("");
   const content = `<section class="page-title"><h2>Plant Monitoring</h2><p>${safe(sourceLabel(data))}</p></section>
     ${camera}
+    <section class="plant-panel nft-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">▦</span><div><p class="eyebrow">NFT PLANTING RECORDS</p><h2>12 fixed plant slots</h2></div></div><p class="classification-note">Each row is numbered right to left as seen in the camera: top Plant 1–6, bottom Plant 7–12. Dates are entered by the farmer; AI boxes do not identify individual slots.</p>${slots?.supported ? `<div class="nft-rows" aria-label="Plant slots"><span>Top NFT row</span>${plantSlotRow(slots, 1)}<span>Bottom NFT row</span>${plantSlotRow(slots, 7)}</div>${data.stale || !data.online || slots.error ? `<p role="status">${safe(slots.error || "Planting records may be stale. Reconnect before editing.")}</p>` : ""}` : `<p role="status">Planting records are unavailable until the Pi backend is updated.</p>`}</section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT CONDITION</p><h2>Vision analysis</h2></div></div><div class="plant-result"><div><span class="status ${conditionTone}"><b aria-hidden="true">${conditionTone === "good" ? "✓" : conditionTone === "danger" ? "!" : "·"}</b>${safe(data.plant.status)}</span><strong>${safe(data.plant.condition)}</strong><small class="analysis-detail">${safe(data.plant.analysisDetail)}</small></div><div class="confidence"><span>Model confidence</span><strong>${safe(data.plant.confidence)}</strong></div></div><div class="classification-grid" aria-label="Latest per-class plant analysis">${classificationCards}</div><p class="classification-note">Harvest-Ready is an experimental visual indication and should be confirmed using growing-day records.</p></section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◌</span><div><p class="eyebrow">PEST STATUS</p><h2>Presence detection only</h2></div></div><div class="notice ${pestKnown ? (data.plant.pestDetected ? "danger" : "good") : "warn"}"><b aria-hidden="true">${!pestKnown || data.plant.pestDetected ? "!" : "✓"}</b><div><strong>${safe(data.plant.pestStatus)}</strong><small>${safe(data.plant.pestDetail)}</small></div></div></section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>Reliability indicator</h2></div></div><div class="fusion-result"><strong>${safe(data.fusion.confidence.toUpperCase())}</strong><p>${safe(data.fusion.reason)}</p></div></section>`;
   app.innerHTML = renderShell(content, data);
+  document.querySelectorAll("[data-plant-slot]").forEach((button) => button.addEventListener("click", () => {
+    if (data.stale || !data.online || slots?.error) {
+      showToast("Reconnect before editing planting records.", "warn");
+      return;
+    }
+    showPlantSlotDialog(slots.slots[Number(button.dataset.plantSlot) - 1], slots);
+  }));
   bindNav();
 }
 
@@ -478,7 +546,7 @@ function renderError(error) {
 }
 
 function renderUnavailable(data) {
-  if (activePage === "Plants") renderPlants(data);
+  if (activePage === "Plants") renderPlants(data, lastPageData.get("Plants"));
   else if (activePage === "Settings") renderSettings(data);
   else renderDashboard(data);
 }
@@ -491,6 +559,7 @@ async function render() {
     if (activePage === "History") requests.push(api.getHistory(historyRange, historyMetric));
     if (activePage === "Alerts") requests.push(api.getAlerts());
     if (activePage === "Settings") requests.push(api.getSmsSettings());
+    if (activePage === "Plants") requests.push(api.getPlantSlots().catch((error) => ({ supported: false, error: error.message })));
     let [data, pageData] = await withTimeout(Promise.all(requests));
     if (sequence !== renderSequence) return;
     const age = Date.now() - Date.parse(data.updatedAt);
@@ -500,7 +569,7 @@ async function render() {
     lastSnapshot = data;
     if (pageData !== undefined) lastPageData.set(activePage, pageData);
 
-    if (activePage === "Plants") renderPlants(data);
+    if (activePage === "Plants") renderPlants(data, pageData);
     else if (activePage === "History") renderHistory(data, pageData);
     else if (activePage === "Alerts") renderAlerts(data, pageData);
     else if (activePage === "Settings") renderSettings(data, pageData);
@@ -512,7 +581,7 @@ async function render() {
     const pageNeedsData = activePage === "History" || activePage === "Alerts";
     if (lastSnapshot && (!pageNeedsData || cachedPageData !== undefined)) {
       const staleData = markSnapshotStale(lastSnapshot, error?.message || "The backend could not be refreshed.");
-      if (activePage === "Plants") renderPlants(staleData);
+      if (activePage === "Plants") renderPlants(staleData, cachedPageData);
       else if (activePage === "History") renderHistory(staleData, cachedPageData);
       else if (activePage === "Alerts") renderAlerts(staleData, cachedPageData);
       else if (activePage === "Settings") renderSettings(staleData, cachedPageData);
@@ -548,7 +617,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=30", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=31", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

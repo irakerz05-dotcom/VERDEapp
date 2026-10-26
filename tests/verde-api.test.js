@@ -7,7 +7,8 @@ import {
   normalizeBackendEvents,
   normalizeBackendHistory,
   normalizeBackendSnapshot,
-  normalizeLiveSensorSnapshot
+  normalizeLiveSensorSnapshot,
+  normalizePlantSlots
 } from "../js/services/verde-api.js";
 
 test("sensor connection status controls fault display without value thresholds", () => {
@@ -436,4 +437,42 @@ test("mock SMS settings are separate from the live modem", async () => {
   await api.updateSmsSettings({ smsEnabled: true, recipient: "+639171234567" });
   assert.equal((await api.getSmsSettings()).recipient_masked, "••••4567");
   assert.equal((await api.getSmsSettings()).modem_configured, false);
+});
+
+test("plant slots normalize fixed positions and keep missing dates empty", () => {
+  const slots = normalizePlantSlots({ as_of: "2026-10-26", slots: [
+    { slot: 1, planted_on: "2026-10-01", days_growing: 25 },
+    { slot: 7, planted_on: null, days_growing: null }
+  ] });
+  assert.equal(slots.slots.length, 12);
+  assert.deepEqual(slots.slots[0], { slot: 1, plantedOn: "2026-10-01", daysGrowing: 25 });
+  assert.deepEqual(slots.slots[6], { slot: 7, plantedOn: null, daysGrowing: null });
+});
+
+test("plant slot updates use the authenticated backend", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    const payload = url === "/api/session" ? { token: "session-token" }
+      : { as_of: "2026-10-26", slots: [{ slot: 1, planted_on: "2026-10-01", days_growing: 25 }] };
+    return { ok: true, status: 200, json: async () => payload };
+  };
+  const api = new VerdeApi({ fetchImpl });
+  assert.equal((await api.getPlantSlots()).slots.length, 12);
+  await api.updatePlantSlots({ operation: "set", slot: 1, planted_on: "2026-10-01" });
+  assert.deepEqual(calls.map(({ url }) => url), ["/api/plant-slots", "/api/session", "/api/plant-slots"]);
+  assert.equal(calls[2].options.headers["X-VERDE-Token"], "session-token");
+  assert.equal(JSON.parse(calls[2].options.body).slot, 1);
+});
+
+test("mock plant slot dates can be swapped and erased", async () => {
+  const api = new MockVerdeApi({ delay: 0 });
+  await api.updatePlantSlots({ operation: "set", slot: 1, planted_on: "2026-01-01" });
+  await api.updatePlantSlots({ operation: "swap", first: 1, second: 7 });
+  let slots = await api.getPlantSlots();
+  assert.equal(slots.slots[0].plantedOn, null);
+  assert.equal(slots.slots[6].plantedOn, "2026-01-01");
+  await api.updatePlantSlots({ operation: "clear", slot: 7 });
+  slots = await api.getPlantSlots();
+  assert.equal(slots.slots[6].plantedOn, null);
 });

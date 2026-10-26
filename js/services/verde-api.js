@@ -323,6 +323,26 @@ export function markSnapshotStale(snapshot, reason) {
   };
 }
 
+export function normalizePlantSlots(payload) {
+  const entries = new Map((Array.isArray(payload?.slots) ? payload.slots : [])
+    .filter((item) => Number.isInteger(item?.slot) && item.slot >= 1 && item.slot <= 12)
+    .map((item) => [item.slot, item]));
+  return {
+    supported: payload?.supported !== false && Array.isArray(payload?.slots),
+    asOf: typeof payload?.as_of === "string" ? payload.as_of : null,
+    error: payload?.error ?? null,
+    slots: Array.from({ length: 12 }, (_, index) => {
+      const source = entries.get(index + 1) ?? {};
+      return {
+        slot: index + 1,
+        plantedOn: /^\d{4}-\d{2}-\d{2}$/.test(source.planted_on ?? "") ? source.planted_on : null,
+        daysGrowing: Number.isInteger(source.days_growing) && source.days_growing >= 0
+          ? source.days_growing : null
+      };
+    })
+  };
+}
+
 function hasSensorOutput(sensor) {
   return (sensor.value !== null && sensor.value !== undefined && sensor.value !== "")
     || finiteNumber(sensor.raw_value) !== null;
@@ -590,6 +610,29 @@ export class VerdeApi {
     return settings ?? { supported: false };
   }
 
+  async getPlantSlots() {
+    const payload = await this.optionalRequest("/api/plant-slots");
+    return normalizePlantSlots(payload ?? { supported: false });
+  }
+
+  async updatePlantSlots(change) {
+    const post = async (refreshToken = false) => this.request("/api/plant-slots", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-VERDE-Token": await this.sessionToken(refreshToken)
+      },
+      body: JSON.stringify(change)
+    });
+    try {
+      return normalizePlantSlots(await post(false));
+    } catch (error) {
+      if (error.status !== 403) throw error;
+      this.token = null;
+      return normalizePlantSlots(await post(true));
+    }
+  }
+
   async updateSmsSettings({ smsEnabled, recipient = undefined }) {
     if (typeof smsEnabled !== "boolean") throw new Error("Choose whether SMS alerts are enabled.");
     if (recipient !== undefined && !/^\+?[0-9]{7,15}$/.test(recipient)) {
@@ -681,6 +724,7 @@ export class MockVerdeApi {
     this.mode = "Full Automation";
     this.smsSettings = { sms_enabled: false, recipient_configured: false,
       recipient_masked: null, modem_configured: false, supported: true };
+    this.plantSlotDates = Array(12).fill(null);
   }
 
   async respond(value) {
@@ -759,6 +803,38 @@ export class MockVerdeApi {
 
   async getSmsSettings() {
     return this.respond(this.smsSettings);
+  }
+
+  async getPlantSlots() {
+    return this.respond(normalizePlantSlots({
+      as_of: new Date().toISOString().slice(0, 10),
+      slots: this.plantSlotDates.map((planted_on, index) => ({
+        slot: index + 1, planted_on,
+        days_growing: planted_on ? Math.floor((Date.now() - Date.parse(`${planted_on}T00:00:00`)) / 86_400_000) : null
+      }))
+    }));
+  }
+
+  async updatePlantSlots(change) {
+    const slot = change?.slot;
+    const valid = (value) => Number.isInteger(value) && value >= 1 && value <= 12;
+    if (change?.operation === "set" && valid(slot)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(change.planted_on ?? "")
+          || Number.isNaN(Date.parse(`${change.planted_on}T00:00:00`))
+          || change.planted_on > new Date().toISOString().slice(0, 10)) {
+        throw new Error("Choose a valid planting date that is not in the future.");
+      }
+      this.plantSlotDates[slot - 1] = change.planted_on;
+    } else if (change?.operation === "clear" && valid(slot)) {
+      this.plantSlotDates[slot - 1] = null;
+    } else if (change?.operation === "swap" && valid(change.first)
+               && valid(change.second) && change.first !== change.second) {
+      [this.plantSlotDates[change.first - 1], this.plantSlotDates[change.second - 1]] =
+        [this.plantSlotDates[change.second - 1], this.plantSlotDates[change.first - 1]];
+    } else {
+      throw new Error("Choose valid plant slots and an action.");
+    }
+    return this.getPlantSlots();
   }
 
   async updateSmsSettings({ smsEnabled, recipient = undefined }) {

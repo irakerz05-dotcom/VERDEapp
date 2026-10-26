@@ -50,6 +50,29 @@ dialog .sms-form-error { color:#a32c27;font-size:.78rem;font-weight:700;margin:0
 /* Alerts and activity */
 .page-title-split { display:flex;align-items:flex-end;justify-content:space-between;gap:16px; }.read-only-label { flex:0 0 auto;padding:6px 9px;border-radius:999px;background:#eef3ef;color:var(--muted);font-size:.63rem;font-weight:750; }
 .alert-summary { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px; }.alert-summary article { display:flex;align-items:center;justify-content:space-between;gap:8px;padding:13px 14px;border-radius:16px;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow); }.alert-summary span { color:var(--muted);font-size:.67rem;font-weight:750; }.alert-summary strong { font-size:1.35rem; }.alert-summary .danger strong { color:#a32c27; }.alert-summary .warn strong { color:#9a6100; }.alert-summary .info strong { color:var(--green); }
+.nft-camera { position:relative; }
+.nft-camera-labels { position:absolute;inset:0;pointer-events:none; }
+.nft-camera-row { position:absolute;left:0;right:0; }
+.nft-camera-row.top { top:12%; }
+.nft-camera-row.bottom { bottom:7%; }
+.nft-camera-row .nft-slot { pointer-events:auto;box-shadow:0 2px 9px rgba(0,0,0,.45);background:rgba(255,255,255,.9); }
+.nft-rows { display:grid;gap:8px;margin-top:16px; }
+.nft-rows>span { font-size:.72rem;font-weight:750;color:var(--muted); }
+.nft-slot-row { display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;direction:rtl; }
+.nft-slot { min-width:0;display:grid;gap:1px;justify-items:center;direction:ltr;border:1px solid #d0e4cf;border-radius:9px;background:#f1f8ee;color:var(--green);padding:7px 2px;cursor:pointer;font:inherit; }
+.nft-slot.planted { background:#dcf2db;border-color:#85c77f; }
+.nft-slot strong { font-size:.75rem; }
+.nft-slot small { font-size:.57rem;white-space:nowrap; }
+.overlay-row .nft-slot { padding:3px 0;border-radius:6px; }
+.overlay-row .nft-slot strong { font-size:.62rem; }
+.overlay-row .nft-slot small { display:none; }
+.nft-slot:focus-visible { outline:3px solid #f4c75e;outline-offset:1px; }
+#plant-slot-form label { display:block;margin:12px 0 5px;font-size:.77rem;font-weight:750; }
+#plant-slot-form input,#plant-slot-form select { width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;background:white;color:var(--ink); }
+#plant-slot-form .dialog-actions { flex-wrap:wrap;margin-top:18px; }
+#plant-slot-form .dialog-actions button { font-size:.72rem; }
+#plant-slot-form .plant-slot-error { color:#a32c27;margin:8px 0;font-size:.75rem; }
+@media (max-width:420px) { .overlay-row .nft-slot { padding:1px 0; } .overlay-row .nft-slot strong { font-size:.55rem; } .nft-slot small { font-size:.51rem; } }
 .alert-filters { margin-bottom:14px; }.alert-list { gap:10px; }.alert-item { position:relative;align-items:flex-start;padding:17px;overflow:hidden; }.alert-item:before { content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#9ab0a0; }.alert-item.danger:before { background:#cc4b44; }.alert-item.warn:before { background:#d79a24; }.alert-item.good:before { background:#42a451; }.alert-symbol { display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border-radius:12px;font-size:.85rem;font-weight:900; }.alert-copy { flex:1;min-width:0; }.alert-title-row { display:flex;align-items:flex-start;justify-content:space-between;gap:10px; }.alert-title-row h2 { padding-top:2px; }.severity { flex:0 0 auto;padding:4px 7px;border-radius:999px;font-size:.58rem;font-weight:850;text-transform:uppercase;letter-spacing:.05em; }.severity.info { color:#456257;background:#edf3ef; }.severity.warn { color:#8a5700;background:#fff0ce; }.severity.danger { color:#922923;background:#ffe3e0; }.severity.good { color:#175f2c;background:#e4f5df; }.alert-meta { display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:9px;color:#819087;font-size:.65rem; }.alert-meta time { display:inline;margin:0;color:inherit;font-size:inherit; }.empty-list>span { display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border-radius:50%;background:#e4f5df;color:#197333;font-weight:900; }
 
 @media (max-width:520px) {

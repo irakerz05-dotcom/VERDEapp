@@ -63,7 +63,7 @@ def reading(snapshot, started, now):
         value = sensor.get(field)
         if (not valid_status or sensor.get("valid") is False
                 or sensor.get("retained") is True or sensor.get("stale") is True
-                or sensor.get("read_error") is not None
+                or sensor.get("spike") is True or sensor.get("read_error") is not None
                 or isinstance(value, bool) or not isinstance(value, (int, float))
                 or not math.isfinite(value) or not low <= value <= high):
             raise ValueError(f"{name} is not a fresh valid reading ({status or 'no status'})")

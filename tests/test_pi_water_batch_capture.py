@@ -40,6 +40,10 @@ class BatchCaptureTests(unittest.TestCase):
         data["sensors"]["ec"]["retained"] = True
         with self.assertRaisesRegex(ValueError, "ec"):
             capture.reading(data, started, current)
+        data = snapshot(current)
+        data["sensors"]["turbidity"]["spike"] = True
+        with self.assertRaisesRegex(ValueError, "turbidity"):
+            capture.reading(data, started, current)
 
     def test_saves_unlabeled_batch_and_rejects_duplicate_acquisition(self):
         with tempfile.TemporaryDirectory() as directory:

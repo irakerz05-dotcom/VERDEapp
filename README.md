@@ -239,7 +239,7 @@ python3 deploy/capture_pi_water_batch.py --batch-id solution-one
 
 The command waits for a new complete cached acquisition after it starts and
 appends one row to `~/verde-water-quality-batches.csv`. It does not trigger a
-hardware read. Use the **same** batch ID for repeat readings of one physical
+hardware read. It skips readings flagged as ADC spikes. Use the **same** batch ID for repeat readings of one physical
 solution; use a new ID only when the physical water sample changes. The
 reference label, method and label time stay blank until independently
 established. Do not infer a class from the prototype, liquid color, or a new

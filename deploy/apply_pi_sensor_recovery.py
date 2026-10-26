@@ -16,12 +16,13 @@ from pathlib import Path
 
 TARGET = Path("/home/verde/VERDE-Sensor-Integration/verde_sensor_service.py")
 MARKER = "# VERDE-SENSOR-RECOVERY-v1"
+UPGRADED_MARKER = "# VERDE-SENSOR-RECOVERY-v2"
 
 
 REPLACEMENTS = [
     ("logging import", "import json\nimport math\n", "import json\nimport logging\nimport math\n"),
     ("logger", "from gpiozero import OutputDevice\n\n\nADS1115_ADDRESS", "from gpiozero import OutputDevice\n\n\nlog = logging.getLogger(__name__)\n\nADS1115_ADDRESS"),
-    ("retry state", "        self.error_counts = Counter()\n        self.last_valid_ph = None", "        self.error_counts = Counter()\n        self.ds18b20_failures = 0\n        self.dht11_failures = 0\n        self.last_valid_ph = None"),
+    ("retry state", "        self.error_counts = Counter()\n        self.last_valid_ph = None", "        self.error_counts = Counter()\n        self.ds18b20_failures = 0\n        self.dht11_failures = 0\n        self.sensor_recovery_limit = 5\n        self.last_valid_ph = None"),
     ("startup 1-Wire discovery", '''        self.ds18b20_device = discover_ds18b20()
         try:
             self.dht11_device = open_dht11()
@@ -63,6 +64,7 @@ REPLACEMENTS = [
     lines = raw_text.splitlines()
 '''),
     ("retry methods", "    def _safe_analog(self, channel):\n", '''    # VERDE-SENSOR-RECOVERY-v1
+    # VERDE-SENSOR-RECOVERY-v2
     @staticmethod
     def _sensor_diagnostic(name, raw, parsed, status, error=None, attempt=1):
         log.info(
@@ -78,6 +80,8 @@ REPLACEMENTS = [
                 # Rediscover on each attempt: a lost 1-Wire device may return.
                 self.ds18b20_device = discover_ds18b20()
                 value = read_ds18b20(self.ds18b20_device, raw)
+                if not 0 <= value <= 45:
+                    raise ValueError(f"implausible water temperature: {value!r} C")
                 self.ds18b20_failures = 0
                 status = f"OK: {self.ds18b20_device.name}; no software offset"
                 self._sensor_diagnostic("water_temperature", raw[0] if raw else None,
@@ -97,7 +101,7 @@ REPLACEMENTS = [
                     time.sleep(0.25)
         self.error_counts["ds18b20_read"] += 1
         self.ds18b20_failures += 1
-        status = ("RECOVERING" if self.ds18b20_failures == 1 else "ERROR") + f": {last_error}"
+        status = ("RECOVERING" if self.ds18b20_failures <= self.sensor_recovery_limit else "ERROR") + f": {last_error}"
         self._sensor_diagnostic("water_temperature", None, None, status, last_error, 2)
         return {
             "value_C": None, "unit": "C", "classification": "UNAVAILABLE",
@@ -139,7 +143,7 @@ REPLACEMENTS = [
                 log.exception("DHT11 cleanup failed before reconnection")
             finally:
                 self.dht11_device = None
-        status = ("RECOVERING" if self.dht11_failures == 1 else "ERROR") + f": {last_error}"
+        status = ("RECOVERING" if self.dht11_failures <= self.sensor_recovery_limit else "ERROR") + f": {last_error}"
         self._sensor_diagnostic("ambient_humidity", None, None, status, last_error, 3)
         return {
             "value": None, "unit": "%", "classification": None,
@@ -210,10 +214,33 @@ REPLACEMENTS = [
 ]
 
 
+UPGRADE_REPLACEMENTS = [
+    ("recovery version marker", f"    {MARKER}\n", f"    {MARKER}\n    {UPGRADED_MARKER}\n"),
+    ("recovery failure limit", "        self.dht11_failures = 0\n        self.last_valid_ph = None", "        self.dht11_failures = 0\n        self.sensor_recovery_limit = 5\n        self.last_valid_ph = None"),
+    ("water temperature validation", "                value = read_ds18b20(self.ds18b20_device, raw)\n                self.ds18b20_failures = 0", "                value = read_ds18b20(self.ds18b20_device, raw)\n                if not 0 <= value <= 45:\n                    raise ValueError(f\"implausible water temperature: {value!r} C\")\n                self.ds18b20_failures = 0"),
+    ("water recovery duration", "        status = (\"RECOVERING\" if self.ds18b20_failures == 1 else \"ERROR\") + f\": {last_error}\"", "        status = (\"RECOVERING\" if self.ds18b20_failures <= self.sensor_recovery_limit else \"ERROR\") + f\": {last_error}\""),
+    ("humidity recovery duration", "        status = (\"RECOVERING\" if self.dht11_failures == 1 else \"ERROR\") + f\": {last_error}\"", "        status = (\"RECOVERING\" if self.dht11_failures <= self.sensor_recovery_limit else \"ERROR\") + f\": {last_error}\""),
+]
+
+
 def build_updated_source(source):
     if MARKER in source:
         raise ValueError("Sensor recovery patch already appears to be installed")
     for label, old, new in REPLACEMENTS:
+        count = source.count(old)
+        if count != 1:
+            raise ValueError(f"{label}: expected one exact match, found {count}; no file changed")
+        source = source.replace(old, new, 1)
+    compile(source, str(TARGET), "exec")
+    return source
+
+
+def upgrade_installed_source(source):
+    if MARKER not in source:
+        raise ValueError("Sensor recovery v1 patch is not installed")
+    if UPGRADED_MARKER in source:
+        raise ValueError("Sensor recovery v2 patch already appears to be installed")
+    for label, old, new in UPGRADE_REPLACEMENTS:
         count = source.count(old)
         if count != 1:
             raise ValueError(f"{label}: expected one exact match, found {count}; no file changed")
@@ -230,6 +257,14 @@ def validate_installed_source(source):
     return True
 
 
+def installed_patch_version(source):
+    if UPGRADED_MARKER in source:
+        return 2
+    if MARKER in source:
+        return 1
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group(required=True)
@@ -239,13 +274,21 @@ def main():
     args = parser.parse_args()
     target = args.target.resolve(strict=True)
     original = target.read_text(encoding="utf-8")
-    if validate_installed_source(original):
+    version = installed_patch_version(original)
+    if version == 2:
+        compile(original, str(target), "exec")
         action = "check" if args.check else "apply"
-        print(f"Already installed: {target}; sensor recovery patch is valid; no files changed ({action})")
+        print(f"Already installed: {target}; sensor recovery v2 is valid; no files changed ({action})")
         return
-    updated = build_updated_source(original)
+    if version == 1:
+        updated = upgrade_installed_source(original)
+        operation = "upgrade"
+    else:
+        updated = build_updated_source(original)
+        operation = "install"
     if args.check:
-        print(f"Ready: {target}; {len(REPLACEMENTS)} guarded edits; syntax valid; no files changed")
+        count = len(UPGRADE_REPLACEMENTS) if operation == "upgrade" else len(REPLACEMENTS)
+        print(f"Ready: {target}; {operation} with {count} guarded edits; syntax valid; no files changed")
         return
     stamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
     backup = target.with_name(f"{target.name}.before_sensor_recovery_{stamp}")
@@ -266,7 +309,7 @@ def main():
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()
-    print(f"Updated: {target}")
+    print(f"Updated: {target} ({operation})")
     print(f"Recovery backup: {backup}")
     print("Service was NOT restarted. Verify the diff and choose a safe restart time.")
 

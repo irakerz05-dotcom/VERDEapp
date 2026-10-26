@@ -8,8 +8,12 @@ from unittest.mock import patch
 
 from deploy.apply_pi_sensor_recovery import (
     MARKER,
+    UPGRADED_MARKER,
     REPLACEMENTS,
+    UPGRADE_REPLACEMENTS,
     build_updated_source,
+    installed_patch_version,
+    upgrade_installed_source,
     validate_installed_source,
 )
 
@@ -54,6 +58,7 @@ class PiSensorRecoveryPatchTests(unittest.TestCase):
         reader.error_counts = Counter()
         reader.ds18b20_failures = 0
         reader.dht11_failures = 0
+        reader.sensor_recovery_limit = 5
         reader.dht11_device = None
         reader.dht11_setup_error = None
         return reader, diagnostics, sleeps
@@ -78,6 +83,26 @@ class PiSensorRecoveryPatchTests(unittest.TestCase):
         compile_mock.assert_called_once()
         self.assertFalse(validate_installed_source("unpatched source"))
 
+    def test_v1_patch_can_be_upgraded_to_v2(self):
+        fixture = "\n\n".join(old for _, old, _ in REPLACEMENTS)
+        with patch("builtins.compile"):
+            v1 = build_updated_source(fixture)
+            v1 = v1.replace(f"    {UPGRADED_MARKER}\n", "")
+            v1 = v1.replace("        self.sensor_recovery_limit = 5\n", "")
+            v1 = v1.replace(
+                "                if not 0 <= value <= 45:\n"
+                "                    raise ValueError(f\"implausible water temperature: {value!r} C\")\n",
+                "",
+            )
+            v1 = v1.replace("self.ds18b20_failures <= self.sensor_recovery_limit", "self.ds18b20_failures == 1")
+            v1 = v1.replace("self.dht11_failures <= self.sensor_recovery_limit", "self.dht11_failures == 1")
+            v2 = upgrade_installed_source(v1)
+        self.assertEqual(installed_patch_version(v1), 1)
+        self.assertEqual(installed_patch_version(v2), 2)
+        self.assertIn(UPGRADED_MARKER, v2)
+        for _, _, new in UPGRADE_REPLACEMENTS:
+            self.assertIn(new, v2)
+
     def test_inserted_methods_and_exception_handler_are_valid_python(self):
         methods = next(new for label, _, new in REPLACEMENTS if label == "retry methods")
         compile("class Reader:\n" + methods + "        pass\n", "<retry methods>", "exec")
@@ -91,6 +116,7 @@ class PiSensorRecoveryPatchTests(unittest.TestCase):
              ValueError("CRC"), ValueError("CRC"), 25.5],
             [RuntimeError("full buffer")] * 3 + [72.0] + [RuntimeError("full buffer")] * 6 + [73.0],
         )
+        reader.sensor_recovery_limit = 1
         water = reader._read_water_temperature()
         self.assertEqual((water["value_C"], water["status"]), (25.0, "OK: 28-00000048b3b1; no software offset"))
         self.assertEqual(reader.error_counts["ds18b20_read"], 0)

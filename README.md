@@ -305,6 +305,31 @@ The comparison reports the pilot class beside the threshold-derived class,
 without an accuracy claim. The test solution must really be a separate water
 preparation; a new batch name for the same water is not an independent test.
 
+### Show the real-reading pilot live, separately
+
+The three-training-batch RF can be shown as an **experimental live comparison**.
+`deploy/apply_pi_real_rf_live.py` checks the existing offline model at
+`~/verde-water-rf-pilot-holdout-optimal02.json.gz`, backs up the Pi service,
+and adds a separate `water_quality_real_pilot` API field. The dashboard shows
+an additional **REAL-DATA RF PILOT** card, including any disagreement with the
+paper's threshold class. The official water classifier, synthetic prototype
+used for descriptive fusion, automation, SMS, GPIO, and calibration are not
+changed. The model remains unvalidated and does not control hardware.
+
+```bash
+cd ~/VERDEapp
+python3 deploy/apply_pi_real_rf_live.py --check
+python3 deploy/apply_pi_real_rf_live.py --apply
+python3 -m py_compile ~/VERDE-Sensor-Integration/app/service.py \
+  ~/VERDE-Sensor-Integration/app/ml/water_quality/real_rf_pilot.py
+sudo systemctl restart verde.service
+```
+
+The restart can briefly put actuators in SAFE/OFF. After startup, inspect
+`/api/status` for `water_quality_real_pilot`. Keep the backup path reported by
+the installer for rollback. The installer is guarded and does not restart the
+service itself.
+
 ## Development workflow across computers
 
 GitHub is the source of truth. Before switching computers, commit and push your finished work:

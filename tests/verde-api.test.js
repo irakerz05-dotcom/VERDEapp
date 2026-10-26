@@ -28,6 +28,21 @@ test("experimental water result is clearly labeled while legacy status stays sep
   assert.equal(unavailable.waterQuality.status, "SENSOR INPUT UNAVAILABLE");
 });
 
+test("real-reading pilot is a separate descriptive result", () => {
+  const base = { sensors: {}, automation: { selected_mode: "Semi-Automation Mode",
+    active_mode: "Semi-Automation Mode", override: true },
+    water_quality: { status: "CLASSIFIER NOT LOADED", value: null },
+    water_quality_experimental: { status: "EXPERIMENTAL", value: "Suboptimal",
+      detail: "Synthetic prototype." },
+    water_quality_real_pilot: { status: "EXPERIMENTAL", value: "Optimal",
+      detail: "Paper thresholds: Suboptimal. Pilot and thresholds disagree." } };
+  const display = normalizeBackendSnapshot(base);
+  assert.equal(display.waterQuality.status, "Prototype: Suboptimal");
+  assert.equal(display.waterQualityPilot.status, "Pilot: Optimal");
+  assert.match(display.waterQualityPilot.summary, /disagree/);
+  assert.equal(normalizeBackendSnapshot({ ...base, water_quality_real_pilot: undefined }).waterQualityPilot, null);
+});
+
 test("sensor connection status controls fault display without value thresholds", () => {
   const snapshot = normalizeLiveSensorSnapshot({ sensors: {
     ph: { value: 18.5430, status: "CONNECTED" },

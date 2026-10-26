@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=42";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=42";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=43";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=43";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -277,6 +277,7 @@ function renderDashboard(data) {
     <section class="sensor-grid" aria-label="Sensor readings">${data.sensors.map(renderCard).join("")}</section>
     <section class="insight-list" aria-label="System insights">
       <article class="insight water"><span class="big-icon" aria-hidden="true">◈</span><div><p class="eyebrow">WATER QUALITY</p><h2>${safe(data.waterQuality.status)}</h2><p>${safe(data.waterQuality.summary)}</p></div></article>
+      ${data.waterQualityPilot ? `<article class="insight water"><span class="big-icon" aria-hidden="true">◇</span><div><p class="eyebrow">REAL-DATA RF PILOT</p><h2>${safe(data.waterQualityPilot.status)}</h2><p>${safe(data.waterQualityPilot.summary)}</p></div></article>` : ""}
       <article class="insight"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT MONITORING</p><h2>${safe(data.plant.condition)}</h2><p>${safe(data.plant.simulatedPest?.status || data.plant.pestStatus)} · Vision ${safe(data.plant.status)}</p></div></article>
       <article class="insight"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>${safe(fusionHeading)}</h2><p>${safe(data.fusion.reason)}</p></div></article>
     </section>`;
@@ -620,7 +621,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=42", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=43", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

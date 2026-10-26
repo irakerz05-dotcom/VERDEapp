@@ -404,6 +404,7 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
   const aiAvailable = camera.ai_image_available === true && camera.ai_status === "READY";
   const fusion = state.fusion ?? {};
   const experimentalWater = state.water_quality_experimental;
+  const realPilot = state.water_quality_real_pilot;
   const waterDisplay = experimentalWater ?? state.water_quality;
   const selectedMode = displayMode(state.automation.selected_mode);
   const activeMode = displayMode(state.automation.active_mode);
@@ -422,6 +423,11 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
         ? `Prototype: ${resultValue(experimentalWater)}` : resultValue(waterDisplay),
       summary: waterDisplay?.detail || waterDisplay?.status || "No classifier detail is available."
     },
+    waterQualityPilot: realPilot ? {
+      status: realPilot.status === "EXPERIMENTAL"
+        ? `Pilot: ${resultValue(realPilot)}` : resultValue(realPilot),
+      summary: realPilot.detail || realPilot.status || "Pilot result unavailable."
+    } : null,
     plant: {
       condition: resultValue(plant),
       status: plant.status ?? "UNAVAILABLE",

@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=33";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=33";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=34";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=34";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -277,7 +277,7 @@ function renderDashboard(data) {
     <section class="sensor-grid" aria-label="Sensor readings">${data.sensors.map(renderCard).join("")}</section>
     <section class="insight-list" aria-label="System insights">
       <article class="insight water"><span class="big-icon" aria-hidden="true">◈</span><div><p class="eyebrow">WATER QUALITY</p><h2>${safe(data.waterQuality.status)}</h2><p>${safe(data.waterQuality.summary)}</p></div></article>
-      <article class="insight"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT MONITORING</p><h2>${safe(data.plant.condition)}</h2><p>${safe(data.plant.pestStatus)} · Vision ${safe(data.plant.status)}</p></div></article>
+      <article class="insight"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT MONITORING</p><h2>${safe(data.plant.condition)}</h2><p>${safe(data.plant.simulatedPest?.status || data.plant.pestStatus)} · Vision ${safe(data.plant.status)}</p></div></article>
       <article class="insight"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>${safe(fusionHeading)}</h2><p>${safe(data.fusion.reason)}</p></div></article>
     </section>`;
   app.innerHTML = renderShell(content, data);
@@ -352,6 +352,8 @@ function renderPlants(data, slots = null) {
     ? `<figure class="camera-frame"><div class="nft-camera"><img src="${safe(frameUrl)}" alt="${data.plant.aiAnnotated ? "Latest AI-annotated plant detection frame" : "Latest camera frame"}" />${slots?.supported ? `<div class="nft-camera-labels"><div class="nft-camera-row top">${plantSlotRow(slots, 1, true)}</div><div class="nft-camera-row bottom">${plantSlotRow(slots, 7, true)}</div></div>` : ""}</div>${data.plant.aiAnnotated ? `<figcaption><b>Experimental AI overlay</b><span>Boxes and confidence come from the latest completed two-stage YOLO analysis.</span></figcaption>` : ""}</figure>`
     : `<section class="camera-placeholder" aria-label="Latest camera frame unavailable"><span aria-hidden="true">▧</span><h2>${data.plant.cameraStatus === "Faulty Camera" ? "Faulty Camera" : "Camera frame unavailable"}</h2><p>${safe(data.plant.cameraStatus || "No camera capture is available.")}</p></section>`;
   const pestKnown = typeof data.plant.pestDetected === "boolean";
+  const simulated = data.plant.simulatedPest || { detected: null, status: "Simulated pest check unavailable", detail: "No recent printed-prop result.", frameUrl: null };
+  const simulatedFrameUrl = safeResourceUrl(simulated.frameUrl, window.location.href);
   const classificationCards = (data.plant.classifications ?? []).map((classification) => {
     const detected = Number.isInteger(classification.count) && classification.count > 0;
     const tone = classification.label === "Wilting" ? "danger"
@@ -366,7 +368,7 @@ function renderPlants(data, slots = null) {
     ${camera}
     <section class="plant-panel nft-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">▦</span><div><p class="eyebrow">NFT PLANTING RECORDS</p><h2>12 fixed plant slots</h2></div></div><p class="classification-note">Each row is numbered right to left as seen in the camera: top Plant 1–6, bottom Plant 7–12. Dates are entered by the farmer; AI boxes do not identify individual slots.</p>${slots?.supported ? `<div class="nft-rows" aria-label="Plant slots"><span>Top NFT row</span>${plantSlotRow(slots, 1)}<span>Bottom NFT row</span>${plantSlotRow(slots, 7)}</div>${data.stale || !data.online || slots.error ? `<p role="status">${safe(slots.error || "Planting records may be stale. Reconnect before editing.")}</p>` : ""}` : `<p role="status">Planting records are unavailable until the Pi backend is updated.</p>`}</section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT CONDITION</p><h2>Vision analysis</h2></div></div><div class="plant-result"><div><span class="status ${conditionTone}"><b aria-hidden="true">${conditionTone === "good" ? "✓" : conditionTone === "danger" ? "!" : "·"}</b>${safe(data.plant.status)}</span><strong>${safe(data.plant.condition)}</strong><small class="analysis-detail">${safe(data.plant.analysisDetail)}</small></div><div class="confidence"><span>Model confidence</span><strong>${safe(data.plant.confidence)}</strong></div></div><div class="classification-grid" aria-label="Latest per-class plant analysis">${classificationCards}</div><p class="classification-note">Harvest-Ready is an experimental visual indication and should be confirmed using growing-day records.</p></section>
-    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◌</span><div><p class="eyebrow">PEST STATUS</p><h2>Presence detection only</h2></div></div><div class="notice ${pestKnown ? (data.plant.pestDetected ? "danger" : "good") : "warn"}"><b aria-hidden="true">${!pestKnown || data.plant.pestDetected ? "!" : "✓"}</b><div><strong>${safe(data.plant.pestStatus)}</strong><small>${safe(data.plant.pestDetail)}</small></div></div></section>
+    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◌</span><div><p class="eyebrow">SIMULATED PEST TEST</p><h2>Printed insect props</h2></div></div><div class="notice ${simulated.detected === null ? "warn" : simulated.detected ? "danger" : "good"}"><b aria-hidden="true">${simulated.detected === false ? "✓" : "!"}</b><div><strong>${safe(simulated.status)}</strong><small>${safe(simulated.detail)}</small></div></div>${simulatedFrameUrl ? `<figure class="camera-frame"><img src="${safe(simulatedFrameUrl)}" alt="Latest annotated printed insect prop check" /><figcaption><b>Saved camera photo</b><span>Yellow boxes show detected printed props. Results refresh after the Pi finishes each scan.</span></figcaption></figure>` : ""}<p class="classification-note">Original backend pest model: ${safe(data.plant.pestStatus)}. ${safe(data.plant.pestDetail)} This separate demonstration never triggers GSM or dosing.</p></section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>Reliability indicator</h2></div></div><div class="fusion-result"><strong>${safe(data.fusion.confidence.toUpperCase())}</strong><p>${safe(data.fusion.reason)}</p></div></section>`;
   app.innerHTML = renderShell(content, data);
   document.querySelectorAll("[data-plant-slot]").forEach((button) => button.addEventListener("click", () => {
@@ -618,7 +620,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=33", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=34", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

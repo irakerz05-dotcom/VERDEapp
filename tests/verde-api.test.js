@@ -395,10 +395,10 @@ test("real adapter uses same-origin routes, session token, and backend mode name
   assert.equal(snapshot.settings.backendConnected, true);
   assert.equal(result.activeMode, "Semi-Automation");
   assert.equal(acknowledged.system_status, backendState.system_status);
-  assert.deepEqual(calls.map((call) => call.url), ["/api/status", "/api/sensors/latest", "/api/sensors/health", "/api/session", "/api/mode", "/api/incidents/acknowledge"]);
-  assert.equal(calls[4].options.headers["X-VERDE-Token"], "test-token");
-  assert.deepEqual(JSON.parse(calls[4].options.body), { mode: "Full Automation Mode" });
-  assert.deepEqual(JSON.parse(calls[5].options.body), { issue_key: "vision:pest" });
+  assert.deepEqual(calls.map((call) => call.url.replace(/\?v=\d+$/, "")), ["/api/status", "/api/sensors/latest", "/api/sensors/health", "/simulated-pest/latest.json", "/api/session", "/api/mode", "/api/incidents/acknowledge"]);
+  assert.equal(calls[5].options.headers["X-VERDE-Token"], "test-token");
+  assert.deepEqual(JSON.parse(calls[5].options.body), { mode: "Full Automation Mode" });
+  assert.deepEqual(JSON.parse(calls[6].options.body), { issue_key: "vision:pest" });
 });
 
 test("real adapter keeps status and camera data when optional sensor routes are unavailable", async () => {
@@ -414,7 +414,7 @@ test("real adapter keeps status and camera data when optional sensor routes are 
   assert.equal(snapshot.plant.cameraStatus, "CONNECTED");
   assert.equal(snapshot.plant.frameUrl, "/api/camera/frame?v=4");
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "pH").value, "6.1000");
-  assert.deepEqual(calls, ["/api/status", "/api/sensors/latest", "/api/sensors/health"]);
+  assert.deepEqual(calls.map((url) => url.replace(/\?v=\d+$/, "")), ["/api/status", "/api/sensors/latest", "/api/sensors/health", "/simulated-pest/latest.json"]);
 });
 
 test("SMS settings use the authenticated backend and never put a number in browser storage", async () => {

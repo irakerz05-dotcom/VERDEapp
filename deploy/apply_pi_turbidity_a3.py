@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Switch the Pi's turbidity acquisition and calibration guard from A0 to A3.
+"""Switch the Pi's turbidity acquisition and calibration guard between A0 and A3.
 
 --check is read-only. --apply backs up and atomically replaces the untracked
 service source. It does not restart the service or change calibration data.
@@ -21,8 +21,13 @@ REPLACEMENTS = (
 )
 
 
-def transform(source):
-    for old, new in REPLACEMENTS:
+def transform(source, channel="A3"):
+    if channel not in ("A0", "A3"):
+        raise ValueError("Unsupported turbidity channel")
+    replacements = REPLACEMENTS if channel == "A3" else tuple(
+        (new, old) for old, new in REPLACEMENTS
+    )
+    for old, new in replacements:
         if source.count(old) != 1 or new in source:
             raise ValueError(f"Expected exactly one current source anchor: {old}")
         source = source.replace(old, new, 1)
@@ -30,10 +35,10 @@ def transform(source):
     return source
 
 
-def apply(path=TARGET):
+def apply(path=TARGET, channel="A3"):
     source = path.read_text(encoding="utf-8")
-    updated = transform(source)
-    backup = path.with_name(f"{path.name}.before_turbidity_a3_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}")
+    updated = transform(source, channel)
+    backup = path.with_name(f"{path.name}.before_turbidity_{channel.lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}")
     shutil.copy2(path, backup)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent,
                                      prefix=f".{path.name}.", delete=False) as handle:
@@ -54,15 +59,16 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--apply", action="store_true")
+    parser.add_argument("--channel", choices=("A0", "A3"), default="A3")
     args = parser.parse_args()
     if args.check:
-        transform(TARGET.read_text(encoding="utf-8"))
-        print(f"Ready: {TARGET}; A3 source syntax valid; no files changed")
+        transform(TARGET.read_text(encoding="utf-8"), args.channel)
+        print(f"Ready: {TARGET}; {args.channel} source syntax valid; no files changed")
     else:
-        backup = apply()
+        backup = apply(channel=args.channel)
         print(f"Updated: {TARGET}")
         print(f"Backup: {backup}")
-        print("Service was NOT restarted. The old A0 calibration will be rejected after restart.")
+        print(f"Service was NOT restarted. The old calibration will be rejected if it is not for {args.channel}.")
 
 
 if __name__ == "__main__":

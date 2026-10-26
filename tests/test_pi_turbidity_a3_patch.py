@@ -27,6 +27,17 @@ class A3PatchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "anchor"):
             transform(transform(self.source()))
 
+    def test_reverse_switch_restores_only_a0_anchors_and_backs_up_a3(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "verde_sensor_service.py"
+            a3_source = transform(self.source())
+            path.write_text(a3_source)
+            backup = apply(path, channel="A0")
+            self.assertEqual(backup.read_text(), a3_source)
+            self.assertEqual(path.read_text(), self.source())
+            with self.assertRaisesRegex(ValueError, "anchor"):
+                transform(path.read_text(), channel="A0")
+
 
 if __name__ == "__main__":
     unittest.main()

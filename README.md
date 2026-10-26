@@ -162,6 +162,11 @@ The A3 capture guard rejects raw or filtered samples at or above 3.29 V,
 slightly below this Pi's 3.3 V ADC supply. A reading close to that limit is
 only a software observation; it does not establish that the sensor output
 will stay within the ADC's input limits in other water samples.
+If the turbidity analog lead is moved back to A0, use the same guarded
+installer with `--channel A0 --check`, then `--channel A0 --apply`. Restart
+`verde.service` and run the calibration capture with `--channel A0`. The A3
+reference is backed up before the new A0 reference is saved; do not reuse the
+old A0 reference from a different probe.
 
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 

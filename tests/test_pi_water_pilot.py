@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from deploy.compare_pi_water_pilot import compare, load_pilot
 from deploy.train_pi_water_pilot import COLUMNS, audit_pilot, fit_pilot
 
 
@@ -59,7 +60,7 @@ class WaterPilotTests(unittest.TestCase):
         self.write_rows()
         samples, summary = audit_pilot(self.csv_path, ["session.csv#2"])
         self.assertFalse(summary["ready_for_exploratory_fit"])
-        with self.assertRaisesRegex(ValueError, "one distinct batch"):
+        with self.assertRaisesRegex(ValueError, "one training batch"):
             fit_pilot(samples, summary, Path(self.directory.name) / "pilot.json.gz")
 
     def test_rejects_claimed_independent_label_in_pilot(self):
@@ -67,6 +68,28 @@ class WaterPilotTests(unittest.TestCase):
         self.write_rows()
         with self.assertRaisesRegex(ValueError, "unlabeled capture"):
             audit_pilot(self.csv_path, ["session.csv#2"])
+
+    def test_new_optimal_batch_is_held_out_and_compared_offline(self):
+        self.rows.append(make_row(159, "optimal-02", 6.1, 1.5, 21, 1.1))
+        self.write_rows()
+        samples, summary = audit_pilot(self.csv_path, ["session.csv#2"])
+        output = Path(self.directory.name) / "held-out.json.gz"
+        fit_pilot(samples, summary, output, ["optimal-02"])
+        model = load_pilot(output)
+        self.assertEqual(model["training_batch_ids"], ["critical", "grow", "suboptimal"])
+        self.assertEqual(model["held_out_batch_ids"], ["optimal-02"])
+        result = compare(model, samples, "optimal-02")
+        self.assertEqual(result["readings"][0]["threshold_class"], "Optimal")
+        self.assertIn(result["readings"][0]["pilot_prediction"],
+                      ("Optimal", "Suboptimal", "Critical"))
+        self.assertIsNone(result["accuracy"])
+        with self.assertRaisesRegex(ValueError, "not explicitly held out"):
+            compare(model, samples, "grow")
+
+    def test_holdout_cannot_remove_only_training_class(self):
+        samples, summary = audit_pilot(self.csv_path, ["session.csv#2"])
+        with self.assertRaisesRegex(ValueError, "after holdout"):
+            fit_pilot(samples, summary, Path(self.directory.name) / "bad.json.gz", ["grow"])
 
 
 if __name__ == "__main__":

@@ -284,6 +284,27 @@ change the service, fusion, automation, SMS, or GPIO. The independently labeled
 candidate trainer in VERDE-Software retains its five-batches-per-class and
 held-out evaluation requirements.
 
+When a newly prepared solution is captured, refit to a **new artifact path**
+with `--holdout-batch new-solution-id`. The model records the training and
+held-out batch IDs and does not use the held-out reading during fitting. Then
+compare it offline:
+
+```bash
+~/verde-rf-pilot-env/bin/python deploy/train_pi_water_pilot.py \
+  ~/verde-water-quality-batches.csv \
+  --exclude-sample 'session.csv#boundary-reading' \
+  --holdout-batch new-solution-id \
+  --pilot-output ~/verde-water-rf-pilot-holdout.json.gz
+python3 deploy/compare_pi_water_pilot.py \
+  ~/verde-water-quality-batches.csv ~/verde-water-rf-pilot-holdout.json.gz \
+  --exclude-sample 'session.csv#boundary-reading' \
+  --batch-id new-solution-id
+```
+
+The comparison reports the pilot class beside the threshold-derived class,
+without an accuracy claim. The test solution must really be a separate water
+preparation; a new batch name for the same water is not an independent test.
+
 ## Development workflow across computers
 
 GitHub is the source of truth. Before switching computers, commit and push your finished work:

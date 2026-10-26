@@ -103,9 +103,15 @@ def export_tree(estimator):
     }
 
 
-def fit_pilot(samples, summary, output):
-    if not summary["ready_for_exploratory_fit"]:
-        raise ValueError("Need at least one distinct batch in each of the three classes")
+def fit_pilot(samples, summary, output, holdout_batches=()):
+    holdout_batches = set(holdout_batches)
+    available_batches = {row["batch"] for row in samples}
+    if holdout_batches - available_batches:
+        raise ValueError("Unknown held-out batch ID(s): " + ", ".join(sorted(holdout_batches - available_batches)))
+    training = [row for row in samples if row["batch"] not in holdout_batches]
+    training_classes = {row["label"] for row in training}
+    if training_classes != set(CLASSES):
+        raise ValueError("Need at least one training batch in each of the three classes after holdout")
     output = Path(output).resolve()
     if output.is_relative_to(ROOT) or output.exists():
         raise ValueError("Choose a new output path outside the Git repository")
@@ -117,7 +123,7 @@ def fit_pilot(samples, summary, output):
         raise RuntimeError("Offline pilot needs scikit-learn, NumPy and SciPy") from exc
     model = make_pipeline(StandardScaler(), RandomForestClassifier(
         n_estimators=100, max_depth=10, random_state=SEED, n_jobs=1))
-    model.fit([row["values"] for row in samples], [row["label"] for row in samples])
+    model.fit([row["values"] for row in training], [row["label"] for row in training])
     scaler, forest = model.steps[0][1], model.steps[1][1]
     artifact = {
         "format_version": 1, "training_source": summary["training_source"],
@@ -127,6 +133,8 @@ def fit_pilot(samples, summary, output):
         "scale": scaler.scale_.tolist(),
         "trees": [export_tree(tree) for tree in forest.estimators_],
         "audit": summary,
+        "training_batch_ids": sorted({row["batch"] for row in training}),
+        "held_out_batch_ids": sorted(holdout_batches),
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent)
@@ -148,6 +156,8 @@ def main():
     parser.add_argument("csv", type=Path, help="Unlabeled Pi water batch CSV")
     parser.add_argument("--exclude-sample", action="append", default=[],
                         help="Explicitly omit a boundary reading by its full sample ID")
+    parser.add_argument("--holdout-batch", action="append", default=[],
+                        help="Keep this complete batch out of fitting for offline comparison")
     parser.add_argument("--pilot-output", type=Path,
                         help="Fit a new offline pilot artifact outside Git")
     args = parser.parse_args()
@@ -155,7 +165,7 @@ def main():
         samples, summary = audit_pilot(args.csv, args.exclude_sample)
         print(json.dumps(summary, indent=2))
         if args.pilot_output:
-            output = fit_pilot(samples, summary, args.pilot_output)
+            output = fit_pilot(samples, summary, args.pilot_output, args.holdout_batch)
             print(f"Offline exploratory RF saved to {output}; no accuracy claimed; NOT installed on Pi")
     except (OSError, ValueError, RuntimeError) as exc:
         parser.exit(1, f"Pilot not fitted: {exc}\n")

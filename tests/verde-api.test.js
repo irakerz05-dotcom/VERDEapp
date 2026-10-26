@@ -93,7 +93,7 @@ test("a project-reference NTU estimate is labeled and remains numeric", () => {
   const reading = normalizeLiveSensorSnapshot({ sensors: { turbidity: sensor } })
     .find((item) => item.label === "Turbidity");
   assert.equal(reading.value, "1.0000");
-  assert.equal(reading.unit, "NTU");
+  assert.equal(reading.unit, "est. NTU");
   assert.match(reading.detail, /Project NTU estimate/);
   assert.match(reading.detail, /0\.5762 V/);
 });

@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=32";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=32";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=33";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=33";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -96,11 +96,12 @@ function renderShell(content, data) {
 function renderCard(sensor) {
   const tone = statusClass(sensor.status);
   const marker = tone === "good" ? "✓" : tone === "danger" ? "!" : "·";
+  const showDetail = sensor.detail && !["Turbidity", "Water Temperature", "Humidity"].includes(sensor.label);
   return `<article class="sensor-card">
     <span class="sensor-icon" aria-hidden="true">${safe(sensor.icon)}</span>
     <div><h2>${safe(sensor.label)}</h2><p class="reading">${safe(sensor.value)}<small>${safe(sensor.unit)}</small></p>
     <span class="status ${tone}"><b aria-hidden="true">${marker}</b>${safe(sensor.status)}</span>
-    ${sensor.detail ? `<p class="sensor-detail">${safe(sensor.detail)}</p>` : ""}</div>
+    ${showDetail ? `<p class="sensor-detail">${safe(sensor.detail)}</p>` : ""}</div>
   </article>`;
 }
 
@@ -617,7 +618,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=32", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=33", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

@@ -252,6 +252,38 @@ reference label, method and label time stay blank until independently
 established. Do not infer a class from the prototype, liquid color, or a new
 batch ID. A failed water sensor makes capture fail without writing a row.
 
+### Fit an offline pilot from captured readings
+
+`deploy/train_pi_water_pilot.py` can fit a **threshold-labeled exploratory RF**
+from the unlabeled batch CSV. It uses the four real Pi measurements as features,
+but assigns classes with the paper's same threshold rules; this tests a fitting
+workflow, not independent water-quality accuracy. A physical batch with rows
+on different sides of a class boundary is rejected until a specific unsuitable
+reading is explicitly excluded. The audit lists every exclusion.
+
+```bash
+cd ~/VERDEapp
+python3 deploy/train_pi_water_pilot.py ~/verde-water-quality-batches.csv \
+  --exclude-sample 'session.csv#boundary-reading'
+```
+
+To fit, supply a **new** output path outside Git and use a Python environment
+with scikit-learn, NumPy, and SciPy installed:
+
+```bash
+~/verde-rf-pilot-env/bin/python deploy/train_pi_water_pilot.py \
+  ~/verde-water-quality-batches.csv \
+  --exclude-sample 'session.csv#boundary-reading' \
+  --pilot-output ~/verde-water-rf-pilot.json.gz
+```
+
+The script requires at least one distinct batch per class. It reports **no
+accuracy score** because those batches are all used for fitting. Its artifact
+is deliberately incompatible with the live prototype loader; it does not
+change the service, fusion, automation, SMS, or GPIO. The independently labeled
+candidate trainer in VERDE-Software retains its five-batches-per-class and
+held-out evaluation requirements.
+
 ## Development workflow across computers
 
 GitHub is the source of truth. Before switching computers, commit and push your finished work:

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from deploy.apply_pi_sensor_recovery import (
+    FINAL_MARKER,
     MARKER,
     UPGRADED_MARKER,
     REPLACEMENTS,
@@ -83,25 +84,21 @@ class PiSensorRecoveryPatchTests(unittest.TestCase):
         compile_mock.assert_called_once()
         self.assertFalse(validate_installed_source("unpatched source"))
 
-    def test_v1_patch_can_be_upgraded_to_v2(self):
+    def test_v1_patch_can_be_upgraded_to_v3_without_temperature_limit(self):
         fixture = "\n\n".join(old for _, old, _ in REPLACEMENTS)
         with patch("builtins.compile"):
             v1 = build_updated_source(fixture)
             v1 = v1.replace(f"    {UPGRADED_MARKER}\n", "")
+            v1 = v1.replace(f"    {FINAL_MARKER}\n", "")
             v1 = v1.replace("        self.sensor_recovery_limit = 5\n", "")
-            v1 = v1.replace(
-                "                if not 0 <= value <= 45:\n"
-                "                    raise ValueError(f\"implausible water temperature: {value!r} C\")\n",
-                "",
-            )
             v1 = v1.replace("self.ds18b20_failures <= self.sensor_recovery_limit", "self.ds18b20_failures == 1")
             v1 = v1.replace("self.dht11_failures <= self.sensor_recovery_limit", "self.dht11_failures == 1")
-            v2 = upgrade_installed_source(v1)
+            v3 = upgrade_installed_source(v1)
         self.assertEqual(installed_patch_version(v1), 1)
-        self.assertEqual(installed_patch_version(v2), 2)
-        self.assertIn(UPGRADED_MARKER, v2)
-        for _, _, new in UPGRADE_REPLACEMENTS:
-            self.assertIn(new, v2)
+        self.assertEqual(installed_patch_version(v3), 3)
+        self.assertIn(FINAL_MARKER, v3)
+        self.assertNotIn("implausible water temperature", v3)
+        self.assertIn("self.sensor_recovery_limit = 5", v3)
 
     def test_inserted_methods_and_exception_handler_are_valid_python(self):
         methods = next(new for label, _, new in REPLACEMENTS if label == "retry methods")

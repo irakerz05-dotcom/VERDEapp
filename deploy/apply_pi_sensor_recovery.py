@@ -17,6 +17,7 @@ from pathlib import Path
 TARGET = Path("/home/verde/VERDE-Sensor-Integration/verde_sensor_service.py")
 MARKER = "# VERDE-SENSOR-RECOVERY-v1"
 UPGRADED_MARKER = "# VERDE-SENSOR-RECOVERY-v2"
+FINAL_MARKER = "# VERDE-SENSOR-RECOVERY-v3"
 
 
 REPLACEMENTS = [
@@ -65,6 +66,7 @@ REPLACEMENTS = [
 '''),
     ("retry methods", "    def _safe_analog(self, channel):\n", '''    # VERDE-SENSOR-RECOVERY-v1
     # VERDE-SENSOR-RECOVERY-v2
+    # VERDE-SENSOR-RECOVERY-v3
     @staticmethod
     def _sensor_diagnostic(name, raw, parsed, status, error=None, attempt=1):
         log.info(
@@ -80,8 +82,6 @@ REPLACEMENTS = [
                 # Rediscover on each attempt: a lost 1-Wire device may return.
                 self.ds18b20_device = discover_ds18b20()
                 value = read_ds18b20(self.ds18b20_device, raw)
-                if not 0 <= value <= 45:
-                    raise ValueError(f"implausible water temperature: {value!r} C")
                 self.ds18b20_failures = 0
                 status = f"OK: {self.ds18b20_device.name}; no software offset"
                 self._sensor_diagnostic("water_temperature", raw[0] if raw else None,
@@ -223,6 +223,12 @@ UPGRADE_REPLACEMENTS = [
 ]
 
 
+V2_UPGRADE_REPLACEMENTS = [
+    ("recovery version marker", f"    {UPGRADED_MARKER}\n", f"    {UPGRADED_MARKER}\n    {FINAL_MARKER}\n"),
+    ("remove water temperature limit", "                if not 0 <= value <= 45:\n                    raise ValueError(f\"implausible water temperature: {value!r} C\")\n", ""),
+]
+
+
 def build_updated_source(source):
     if MARKER in source:
         raise ValueError("Sensor recovery patch already appears to be installed")
@@ -235,16 +241,24 @@ def build_updated_source(source):
     return source
 
 
-def upgrade_installed_source(source):
-    if MARKER not in source:
-        raise ValueError("Sensor recovery v1 patch is not installed")
-    if UPGRADED_MARKER in source:
-        raise ValueError("Sensor recovery v2 patch already appears to be installed")
-    for label, old, new in UPGRADE_REPLACEMENTS:
+def apply_replacements(source, replacements):
+    for label, old, new in replacements:
         count = source.count(old)
         if count != 1:
             raise ValueError(f"{label}: expected one exact match, found {count}; no file changed")
         source = source.replace(old, new, 1)
+    return source
+
+
+def upgrade_installed_source(source):
+    version = installed_patch_version(source)
+    if version == 0:
+        raise ValueError("Sensor recovery patch is not installed")
+    if version == 3:
+        raise ValueError("Sensor recovery v3 patch already appears to be installed")
+    if version == 1:
+        source = apply_replacements(source, UPGRADE_REPLACEMENTS)
+    source = apply_replacements(source, V2_UPGRADE_REPLACEMENTS)
     compile(source, str(TARGET), "exec")
     return source
 
@@ -258,6 +272,8 @@ def validate_installed_source(source):
 
 
 def installed_patch_version(source):
+    if FINAL_MARKER in source:
+        return 3
     if UPGRADED_MARKER in source:
         return 2
     if MARKER in source:
@@ -275,12 +291,12 @@ def main():
     target = args.target.resolve(strict=True)
     original = target.read_text(encoding="utf-8")
     version = installed_patch_version(original)
-    if version == 2:
+    if version == 3:
         compile(original, str(target), "exec")
         action = "check" if args.check else "apply"
-        print(f"Already installed: {target}; sensor recovery v2 is valid; no files changed ({action})")
+        print(f"Already installed: {target}; sensor recovery v3 is valid; no files changed ({action})")
         return
-    if version == 1:
+    if version in (1, 2):
         updated = upgrade_installed_source(original)
         operation = "upgrade"
     else:

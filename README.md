@@ -198,6 +198,13 @@ produces no model class. The prototype feeds the descriptive sensor-vision
 fusion card only; automation, GPIO, and SMS decisions use the existing backend
 inputs.
 
+During temperature or mixing changes, a raw ADC spike can accompany a fresh
+median-filtered pH, EC, or turbidity reading. The experimental RF may use that
+filtered reading but explicitly marks its result provisional and identifies
+the fluctuating input. Faulty, stale, retained, and missing readings still
+produce no class. Fusion continues to treat spike-flagged inputs as unreliable;
+the real-data batch capture excludes them from training rows.
+
 On the Pi, fetch `feature/prototype-water-rf` in VERDE-Software and pull this
 PWA branch. From `~/VERDEapp`, run
 `python3 deploy/apply_pi_prototype_water_rf.py --check`, then

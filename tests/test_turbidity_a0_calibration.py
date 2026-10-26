@@ -66,6 +66,18 @@ class TurbidityReferenceTests(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text()), new)
             self.assertEqual(json.loads(backup.read_text()), old)
 
+    def test_new_a3_record_replaces_a0_with_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "turbidity_calibration_ntu.json"
+            old = {"ads_channel": "A0", "reference_voltage_V": 0.575875}
+            path.write_text(json.dumps(old))
+            readings = [validate_snapshot(self.snapshot(sample=index + 1), channel="A3")
+                        for index in range(SAMPLES)]
+            new = record_for(readings, summarize(readings), channel="A3")
+            backup = save_record(new, path)
+            self.assertEqual(json.loads(path.read_text())["ads_channel"], "A3")
+            self.assertEqual(json.loads(backup.read_text()), old)
+
 
 if __name__ == "__main__":
     unittest.main()

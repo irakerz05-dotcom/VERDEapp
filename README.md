@@ -147,6 +147,18 @@ the resulting number is an estimate and should not be presented as a validated
 physical NTU measurement. The probe's analog output and ADC input voltage
 should be independently checked before treating this reading as calibrated.
 
+For a replacement probe connected to **A3**, run `python3
+deploy/apply_pi_turbidity_a3.py --check` and then `--apply` on the Pi. This
+backs up the untracked sensor-service source; it does not restart the service
+or change the old reference. After restarting `verde.service`, verify the raw
+A3 voltage using `python3 deploy/calibrate_pi_turbidity_a0.py --channel A3
+--check`. If the guarded voltage check passes and no critical turbidity limit
+is configured, capture the new project reference with `python3
+deploy/calibrate_pi_turbidity_a0.py --channel A3 --apply`; the old A0 record is
+backed up. Restart the service to load the A3 record. If A3 exceeds the
+guarded range, stop: no reference is written. The new probe cannot inherit
+the old probe's reference.
+
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 
 ## Live sensor history

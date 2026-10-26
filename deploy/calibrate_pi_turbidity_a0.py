@@ -29,13 +29,15 @@ SAMPLES = 5
 MAX_WAIT_SECONDS = 210
 
 
-def verify_service_source(path=SERVICE_SOURCE):
+def verify_service_source(path=SERVICE_SOURCE, channel="A0"):
+    if channel not in ("A0", "A3"):
+        raise ValueError("Unsupported ADS1115 channel")
     source = path.read_text(encoding="utf-8")
     checks = (
         (r'ADS1115_GAIN\s*=\s*1\b', "ADS1115 gain 1"),
         (r'TURBIDITY_REFERENCE_NTU\s*=\s*1\.0\b', "1.0 reference"),
-        (r'"turbidity"\s*,\s*AnalogIn\(self\.ads,\s*ADS\.P0\)', "A0 input"),
-        (r'record\.get\("ads_channel"\)\s*!=\s*"A0"', "A0 record guard"),
+        (rf'"turbidity"\s*,\s*AnalogIn\(self\.ads,\s*ADS\.P{channel[-1]}\)', f"{channel} input"),
+        (rf'record\.get\("ads_channel"\)\s*!=\s*"{channel}"', f"{channel} record guard"),
         (r'record\.get\("calibration_status"\)\s*!=\s*"CALIBRATED"', "record status guard"),
         (r'TURBIDITY_REFERENCE_NTU\s*\*\s*abs\(reference_voltage\)\s*/\s*abs\(measured_voltage\)',
          "project-relative NTU equation"),
@@ -51,7 +53,7 @@ def read_snapshot(api=API):
         return json.load(response)
 
 
-def validate_snapshot(payload, now=None):
+def validate_snapshot(payload, now=None, channel="A0"):
     system = payload.get("system") or {}
     if system.get("ads1115_address") != "0x48" or system.get("ads1115_gain") != 1:
         raise ValueError("ADS1115 address/gain differs from verified configuration")
@@ -66,14 +68,14 @@ def validate_snapshot(payload, now=None):
         raise ValueError(f"Sensor snapshot is stale or clock is wrong ({age:.0f}s)")
     sensor = (payload.get("sensors") or {}).get("turbidity") or {}
     if sensor.get("spike") is True:
-        raise ValueError("A0 spike was flagged; hold the probe still")
+        raise ValueError(f"{channel} spike was flagged; hold the probe still")
     values = {}
     for name in ("raw_voltage_V", "filtered_voltage_V"):
         value = sensor.get(name)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-            raise ValueError(f"A0 {name} is unavailable")
+            raise ValueError(f"{channel} {name} is unavailable")
         if not 0.01 < value < 3.0:
-            raise ValueError(f"A0 {name}={value} V is outside the guarded capture range")
+            raise ValueError(f"{channel} {name}={value} V is outside the guarded capture range")
         values[name] = float(value)
     return {"sample": sample, "timestamp": payload["timestamp"], **values}
 
@@ -93,25 +95,25 @@ def summarize(samples):
             "filtered_voltage_sd_V": statistics.pstdev(filtered)}
 
 
-def capture(api=API, timeout=MAX_WAIT_SECONDS, after_sample=0):
+def capture(api=API, timeout=MAX_WAIT_SECONDS, after_sample=0, channel="A0"):
     seen = set()
     samples = []
     deadline = time.monotonic() + timeout
     while len(samples) < SAMPLES and time.monotonic() < deadline:
         try:
-            item = validate_snapshot(read_snapshot(api))
+            item = validate_snapshot(read_snapshot(api), channel=channel)
         except (OSError, ValueError, KeyError) as exc:
-            print(f"Waiting for a valid A0 sample: {exc}", flush=True)
+            print(f"Waiting for a valid {channel} sample: {exc}", flush=True)
             time.sleep(5)
             continue
         if item["sample"] > after_sample and item["sample"] not in seen:
             seen.add(item["sample"])
             samples.append(item)
-            print(f"Sample {len(samples)}/{SAMPLES}: #{item['sample']} A0={item['filtered_voltage_V']:.6f} V", flush=True)
+            print(f"Sample {len(samples)}/{SAMPLES}: #{item['sample']} {channel}={item['filtered_voltage_V']:.6f} V", flush=True)
         if len(samples) < SAMPLES:
             time.sleep(5)
     if len(samples) != SAMPLES:
-        raise ValueError("Timed out before five fresh A0 samples; no record was changed")
+        raise ValueError(f"Timed out before five fresh {channel} samples; no record was changed")
     return samples, summarize(samples)
 
 
@@ -122,17 +124,17 @@ def local_critical_limit(path=CONFIG_PATH):
         return (json.load(handle).get("limits") or {}).get("turbidity_critical")
 
 
-def record_for(samples, summary):
+def record_for(samples, summary, channel="A0"):
     return {
         "sensor_type": "SEN0189-compatible analog turbidity sensor",
-        "ads_channel": "A0", "ads_gain": 1,
+        "ads_channel": channel, "ads_gain": 1,
         "calibration_datetime": datetime.now().astimezone().isoformat(timespec="seconds"),
         "reference_sample": "Drinking water designated 1.0 NTU by project operator; not certified",
         "reference_ntu": 1.0,
         "reference_voltage_V": summary["reference_voltage_V"],
         "voltage_statistics": {"sample_count": len(samples), **summary,
                                "samples": samples},
-        "calibration_method": "Median of five distinct cached ADS1115 A0 samples; no direct hardware reads",
+        "calibration_method": f"Median of five distinct cached ADS1115 {channel} samples; no direct hardware reads",
         "calibration_equation": "Estimated NTU = 1.0 * abs(V_reference) / abs(V_measured)",
         "sensor_direction": "Lower voltage gives a larger project NTU estimate",
         "reference_provenance": "USER_ASSIGNED_UNCERTIFIED",
@@ -146,8 +148,8 @@ def save_record(record, path=RECORD_PATH, replace_existing=False):
     if path.exists():
         with path.open(encoding="utf-8") as handle:
             prior = json.load(handle)
-        if prior.get("ads_channel") == "A0" and not replace_existing:
-            raise ValueError("An A0 reference already exists; refusing to replace it automatically")
+        if prior.get("ads_channel") == record["ads_channel"] and not replace_existing:
+            raise ValueError(f"An {record['ads_channel']} reference already exists; refusing to replace it automatically")
         backup = path.with_name(f"{path.name}.before_a0_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}")
         shutil.copy2(path, backup)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent,
@@ -171,15 +173,16 @@ def main():
     choice = parser.add_mutually_exclusive_group(required=True)
     choice.add_argument("--check", action="store_true")
     choice.add_argument("--apply", action="store_true")
+    parser.add_argument("--channel", choices=("A0", "A3"), default="A0")
     parser.add_argument("--replace-existing", action="store_true",
                         help="Replace an existing A0 reference for a new sensor; back up the old record")
     args = parser.parse_args()
     if args.replace_existing and not args.apply:
         parser.error("--replace-existing requires --apply")
-    verify_service_source()
-    current = validate_snapshot(read_snapshot())
+    verify_service_source(channel=args.channel)
+    current = validate_snapshot(read_snapshot(), channel=args.channel)
     threshold = local_critical_limit()
-    print(f"Current A0: {current['filtered_voltage_V']:.6f} V; sample #{current['sample']}")
+    print(f"Current {args.channel}: {current['filtered_voltage_V']:.6f} V; sample #{current['sample']}")
     print(f"Configured critical turbidity threshold: {threshold!r}")
     if threshold is not None:
         print("Note: estimated NTU can influence the configured critical alert and safety override.")
@@ -188,10 +191,10 @@ def main():
         return
     if threshold is not None:
         raise SystemExit("A critical turbidity limit is configured. Review its impact on safety/SMS before assigning this uncertified NTU estimate; no record was changed.")
-    samples, summary = capture(after_sample=current["sample"])
-    record = record_for(samples, summary)
+    samples, summary = capture(after_sample=current["sample"], channel=args.channel)
+    record = record_for(samples, summary, channel=args.channel)
     backup = save_record(record, replace_existing=args.replace_existing)
-    print(f"Saved A0 reference: {summary['reference_voltage_V']:.6f} V = project-assigned 1.0 NTU")
+    print(f"Saved {args.channel} reference: {summary['reference_voltage_V']:.6f} V = project-assigned 1.0 NTU")
     print(f"Prior record backup: {backup}")
     print("The service was NOT restarted. Restart at a safe time to load the reference.")
 

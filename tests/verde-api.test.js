@@ -11,6 +11,23 @@ import {
   normalizePlantSlots
 } from "../js/services/verde-api.js";
 
+test("experimental water result is clearly labeled while legacy status stays separate", () => {
+  const base = { sensors: {}, automation: { selected_mode: "Semi-Automation Mode",
+    active_mode: "Semi-Automation Mode", override: true },
+    water_quality: { status: "CLASSIFIER NOT LOADED", value: null },
+    water_quality_experimental: { status: "EXPERIMENTAL", value: "Suboptimal",
+      detail: "Prototype trained on paper-rule examples." },
+    fusion: { status: "READY", value: "Medium", detail: "Prototype descriptive fusion." } };
+  const display = normalizeBackendSnapshot(base);
+  assert.equal(display.waterQuality.status, "Prototype: Suboptimal");
+  assert.match(display.waterQuality.summary, /Prototype/);
+  assert.equal(display.fusion.confidence, "Medium");
+  const unavailable = normalizeBackendSnapshot({ ...base,
+    water_quality_experimental: { status: "SENSOR INPUT UNAVAILABLE", value: null,
+      detail: "Four fresh water sensor readings are required." } });
+  assert.equal(unavailable.waterQuality.status, "SENSOR INPUT UNAVAILABLE");
+});
+
 test("sensor connection status controls fault display without value thresholds", () => {
   const snapshot = normalizeLiveSensorSnapshot({ sensors: {
     ph: { value: 18.5430, status: "CONNECTED" },

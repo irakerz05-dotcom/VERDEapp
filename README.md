@@ -185,6 +185,26 @@ The installer backs up the existing backend web module. Restart
 SAFE/OFF and may reopen SMS incidents. Afterward, check
 `http://127.0.0.1:8000/api/plant-slots` on the Pi.
 
+## Experimental water-quality Random Forest
+
+The water-quality card shows a clearly labeled **Prototype** result when all
+four Pi readings (pH, EC, water temperature, turbidity) are fresh and valid.
+The model was trained on synthetic examples labeled by the paper's threshold
+rules; it has no validation against labeled physical water samples. The Pi's
+turbidity NTU reference is project-assigned. Missing or conflicting evidence
+produces no model class. The prototype feeds the descriptive sensor-vision
+fusion card only; automation, GPIO, and SMS decisions use the existing backend
+inputs.
+
+On the Pi, fetch `feature/prototype-water-rf` in VERDE-Software and pull this
+PWA branch. From `~/VERDEapp`, run
+`python3 deploy/apply_pi_prototype_water_rf.py --check`, then
+`python3 deploy/apply_pi_prototype_water_rf.py --apply`. The installer backs up
+the backend files it changes and does not restart the service. Restart
+`verde.service` at a safe time, then inspect `/api/status` for
+`water_quality_experimental` and `fusion`. A missing or faulty water probe
+must leave the experimental result unavailable and the fusion result Low.
+
 ## Development workflow across computers
 
 GitHub is the source of truth. Before switching computers, commit and push your finished work:
@@ -212,4 +232,4 @@ Signing in to ChatGPT/Codex with the same account does not replace GitHub as the
 - Mode changes and dosing confirmations must be validated by the backend.
 - Critical, Faulty Sensor, and Faulty Vision states must remain backend-enforced safety overrides to Semi-Automation Mode.
 - API GET responses are network-only in the service worker; stale live readings are never installed as offline cache entries.
-- Do not add credentials, Wi-Fi passwords, GSM details, `.env` files, model weights, datasets, logs, or databases to Git.
+- Do not add credentials, Wi-Fi passwords, GSM details, `.env` files, physical training datasets, logs, or databases to Git. The synthetic prototype artifact in VERDE-Software is documented and reproducible.

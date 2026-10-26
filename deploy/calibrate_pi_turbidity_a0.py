@@ -31,6 +31,12 @@ MAX_WAIT_SECONDS = 210
 # this check cannot protect against later sensor output excursions.
 MAX_CAPTURE_V = 3.29
 
+# Sensor analog output -> 1 kOhm -> ADS1115 A0 -> 2 kOhm -> ground.
+# The ADC sees 2/3 of the sensor output. The voltage ratio used for the
+# project-relative estimate is unchanged because both readings use this divider.
+A0_DIVIDER_TOP_OHMS = 1000
+A0_DIVIDER_BOTTOM_OHMS = 2000
+
 
 def verify_service_source(path=SERVICE_SOURCE, channel="A0"):
     if channel not in ("A0", "A3"):
@@ -128,7 +134,7 @@ def local_critical_limit(path=CONFIG_PATH):
 
 
 def record_for(samples, summary, channel="A0"):
-    return {
+    record = {
         "sensor_type": "SEN0189-compatible analog turbidity sensor",
         "ads_channel": channel, "ads_gain": 1,
         "calibration_datetime": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -144,6 +150,15 @@ def record_for(samples, summary, channel="A0"):
         "calibration_status": "CALIBRATED",
         "interpretation": "Single-point project estimate, not a validated physical NTU measurement",
     }
+    if channel == "A0":
+        ratio = A0_DIVIDER_BOTTOM_OHMS / (A0_DIVIDER_TOP_OHMS + A0_DIVIDER_BOTTOM_OHMS)
+        record["voltage_divider"] = {
+            "top_ohms": A0_DIVIDER_TOP_OHMS,
+            "bottom_ohms": A0_DIVIDER_BOTTOM_OHMS,
+            "adc_fraction_of_sensor_output": ratio,
+        }
+        record["reference_sensor_output_estimate_V"] = summary["reference_voltage_V"] / ratio
+    return record
 
 
 def save_record(record, path=RECORD_PATH, replace_existing=False):

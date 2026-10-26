@@ -30,6 +30,8 @@ class TurbidityReferenceTests(unittest.TestCase):
         self.assertAlmostEqual(record["reference_voltage_V"], 0.5762)
         self.assertEqual(record["ads_channel"], "A0")
         self.assertEqual(record["reference_provenance"], "USER_ASSIGNED_UNCERTIFIED")
+        self.assertAlmostEqual(record["voltage_divider"]["adc_fraction_of_sensor_output"], 2 / 3)
+        self.assertAlmostEqual(record["reference_sensor_output_estimate_V"], 0.5762 * 1.5)
 
     def test_unstable_duplicate_and_invalid_samples_never_make_a_reference(self):
         readings = [validate_snapshot(self.snapshot(sample=index + 1,

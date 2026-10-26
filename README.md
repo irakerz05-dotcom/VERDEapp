@@ -132,19 +132,18 @@ EC/TDS cards show the live electrical voltage together with
 `CONNECTED — CALIBRATION REQUIRED`. Raw volts are not relabeled as calibrated
 pH, mS/cm, ppm or NTU values.
 
-The installed DFRobot SEN0189 turbidity board's D output is wired to Raspberry
-Pi GPIO5 (physical pin 29), separate from the ADS1115. The running Pi backend
-still reads ADS1115 A0, so its voltage is unrelated to turbidity. D mode
-provides a one-bit digital threshold output, not continuous NTU. The guarded
-`deploy/apply_pi_turbidity_gpio5.py --check` checks a pending Pi source change
-without applying it. `--apply --signal-3v3-verified` backs up the source
-without restarting the service, and must be used only after the signal is
-verified. **Before a service restart, verify the D output is safe for the Pi's
-3.3 V GPIO input.** The board is powered at 5 V and its HIGH output voltage is
-not yet verified. Once safely installed, the app displays only HIGH or LOW and
-keeps numeric turbidity unavailable for automation and Random Forest. The
-digital threshold polarity and potentiometer setting also remain unverified.
-The legacy A0/A3 calibration utilities in `deploy/` do not apply to GPIO5.
+The DFRobot SEN0189 turbidity board is now set to analog output and connected
+to ADS1115 A0 through a voltage divider: 1 kOhm from the sensor output to A0,
+and 2 kOhm from A0 to ground. A0 should receive two-thirds of the sensor
+output. DFRobot specifies an analog output range of 0 to 4.5 V, so this
+divider puts the specified maximum at 3.0 V, below the ADS1115's 3.3 V
+supply. The live Pi backend reads A0; its previous A3 calibration record must
+be replaced with a fresh A0 reference from the drinking-water sample. Run
+`deploy/calibrate_pi_turbidity_a0.py --channel A0 --check`, then `--apply`
+while the probe remains in the reference water. The installer backs up the
+prior calibration record and the Pi service must be restarted separately.
+The older GPIO5 digital-threshold installer remains in `deploy/` but does not
+apply to the current analog connection; do not run it.
 A drinking-water sample designated 1.0 NTU by the project is a reference
 assumption, not a certified measurement or a live sensor reading.
 

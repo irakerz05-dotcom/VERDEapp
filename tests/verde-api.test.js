@@ -116,6 +116,8 @@ test("operator-assigned drinking-water NTU stays display-only and unverified", (
   assert.equal(assigned.value, "1.0000");
   assert.equal(assigned.unit, "NTU");
   assert.equal(assigned.status, "ASSIGNED / UNVERIFIED");
+  assert.equal(assigned.isAssignedReference, true);
+  assert.equal(assigned.detail, "");
   assert.equal(assigned.isRaw, true);
   assert.equal(payload.sensors.turbidity.value_ntu, null);
 

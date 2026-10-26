@@ -297,7 +297,8 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
         value: "1.0000",
         unit: "NTU",
         status: "ASSIGNED / UNVERIFIED",
-        detail: "Drinking-water reference assigned by the project; not a validated sensor reading.",
+        detail: "",
+        isAssignedReference: true,
         isRaw: true,
         lastReadingAt: payload.timestamp ?? health?.timestamp ?? null
       };

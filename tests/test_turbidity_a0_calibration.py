@@ -1,13 +1,16 @@
 """Guard rails for the Pi's project-relative A0 reference capture."""
 
 import json
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from deploy.calibrate_pi_turbidity_a0 import (
-    SAMPLES, record_for, save_record, summarize, validate_snapshot,
+    SAMPLES, capture, record_for, save_record, summarize, validate_snapshot,
 )
 
 
@@ -46,6 +49,28 @@ class TurbidityReferenceTests(unittest.TestCase):
         for bad in (self.snapshot(raw=0, filtered=0), self.snapshot(spike=True)):
             with self.assertRaises(ValueError):
                 validate_snapshot(bad)
+
+    def test_capture_waits_for_five_consecutive_stable_samples(self):
+        drifting = [1.70, 1.71, 1.72, 1.73]
+        settled = [1.7500, 1.7501, 1.7500, 1.7502, 1.7501]
+        snapshots = [self.snapshot(raw=voltage, filtered=voltage, sample=index)
+                     for index, voltage in enumerate(drifting + settled, start=1)]
+        with (patch("deploy.calibrate_pi_turbidity_a0.read_snapshot", side_effect=snapshots),
+              patch("deploy.calibrate_pi_turbidity_a0.time.sleep"),
+              redirect_stdout(io.StringIO())):
+            readings, summary = capture(timeout=10)
+        self.assertEqual([item["sample"] for item in readings], [5, 6, 7, 8, 9])
+        self.assertAlmostEqual(summary["reference_voltage_V"], 1.7501)
+
+    def test_capture_discards_window_after_spike(self):
+        snapshots = [self.snapshot(raw=1.75, filtered=1.75, sample=index)
+                     for index in range(1, 10)]
+        snapshots[3]["sensors"]["turbidity"]["spike"] = True
+        with (patch("deploy.calibrate_pi_turbidity_a0.read_snapshot", side_effect=snapshots),
+              patch("deploy.calibrate_pi_turbidity_a0.time.sleep"),
+              redirect_stdout(io.StringIO())):
+            readings, _ = capture(timeout=10)
+        self.assertEqual([item["sample"] for item in readings], [5, 6, 7, 8, 9])
 
     def test_save_backs_up_old_a3_record_and_rejects_a0_replacement(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -142,6 +142,8 @@ be replaced with a fresh A0 reference from the drinking-water sample. Run
 `deploy/calibrate_pi_turbidity_a0.py --channel A0 --check`, then `--apply`
 while the probe remains in the reference water. The installer backs up the
 prior calibration record and the Pi service must be restarted separately.
+Capture waits up to ten minutes for five consecutive stable A0 samples and
+leaves the old record in place if the signal keeps drifting or spiking.
 The older GPIO5 digital-threshold installer remains in `deploy/` but does not
 apply to the current analog connection; do not run it.
 A drinking-water sample designated 1.0 NTU by the project is a reference

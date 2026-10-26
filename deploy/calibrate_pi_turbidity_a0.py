@@ -3,8 +3,8 @@
 
 The farmer designates the current drinking water as 1.0 NTU. This is a single
 point estimate, not a certified NTU calibration. No GPIO/I2C access occurs here.
-Run --check first; --apply waits for five distinct backend samples, backs up the
-old record, and saves a new A0 reference. Restart the service separately.
+Run --check first; --apply waits for five consecutive stable backend samples,
+backs up the old record, and saves a new A0 reference. Restart separately.
 """
 
 import argparse
@@ -26,7 +26,7 @@ RECORD_PATH = Path("/home/verde/turbidity_calibration_ntu.json")
 CONFIG_PATH = Path("/home/verde/VERDE-Sensor-Integration/config.local.json")
 API = "http://127.0.0.1:8000/api/sensors/latest"
 SAMPLES = 5
-MAX_WAIT_SECONDS = 210
+MAX_WAIT_SECONDS = 600
 # ADS1115 VDD is 3.3 V on this Pi. Leave a small capture margin below VDD;
 # this check cannot protect against later sensor output excursions.
 MAX_CAPTURE_V = 3.29
@@ -108,22 +108,28 @@ def capture(api=API, timeout=MAX_WAIT_SECONDS, after_sample=0, channel="A0"):
     seen = set()
     samples = []
     deadline = time.monotonic() + timeout
-    while len(samples) < SAMPLES and time.monotonic() < deadline:
+    while time.monotonic() < deadline:
         try:
             item = validate_snapshot(read_snapshot(api), channel=channel)
         except (OSError, ValueError, KeyError) as exc:
+            samples.clear()
             print(f"Waiting for a valid {channel} sample: {exc}", flush=True)
             time.sleep(5)
             continue
         if item["sample"] > after_sample and item["sample"] not in seen:
             seen.add(item["sample"])
+            if samples and item["sample"] != samples[-1]["sample"] + 1:
+                samples.clear()
             samples.append(item)
-            print(f"Sample {len(samples)}/{SAMPLES}: #{item['sample']} {channel}={item['filtered_voltage_V']:.6f} V", flush=True)
-        if len(samples) < SAMPLES:
-            time.sleep(5)
-    if len(samples) != SAMPLES:
-        raise ValueError(f"Timed out before five fresh {channel} samples; no record was changed")
-    return samples, summarize(samples)
+            samples = samples[-SAMPLES:]
+            print(f"Window {len(samples)}/{SAMPLES}: #{item['sample']} {channel}={item['filtered_voltage_V']:.6f} V", flush=True)
+            if len(samples) == SAMPLES:
+                try:
+                    return samples, summarize(samples)
+                except ValueError as exc:
+                    print(f"Still settling: {exc}; waiting for another sample", flush=True)
+        time.sleep(5)
+    raise ValueError(f"Timed out without five consecutive stable {channel} samples; no record was changed")
 
 
 def local_critical_limit(path=CONFIG_PATH):

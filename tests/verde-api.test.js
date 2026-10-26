@@ -87,6 +87,17 @@ test("A0 voltage remains visible when only the old A3 NTU calibration is invalid
   assert.equal(disconnected.value, "—");
 });
 
+test("a project-reference NTU estimate is labeled and remains numeric", () => {
+  const sensor = { value_ntu: 1.0, status: "CALIBRATED", classification: "OPTIMAL",
+    reference_voltage_V: 0.5762, raw_voltage_V: 0.5761, filtered_voltage_V: 0.5762 };
+  const reading = normalizeLiveSensorSnapshot({ sensors: { turbidity: sensor } })
+    .find((item) => item.label === "Turbidity");
+  assert.equal(reading.value, "1.0000");
+  assert.equal(reading.unit, "NTU");
+  assert.match(reading.detail, /Project NTU estimate/);
+  assert.match(reading.detail, /0\.5762 V/);
+});
+
 test("live humidity is Optimal only from 65% through 78% inclusive", () => {
   for (const [value, expected] of [
     [64.9, "Suboptimal"], [65, "Optimal"], [72, "Optimal"],

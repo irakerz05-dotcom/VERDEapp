@@ -136,6 +136,17 @@ When the turbidity backend rejects an incompatible calibration but still provide
 an A0 voltage, the turbidity card shows that live voltage as an uncalibrated
 signal in V. It does not report NTU or claim that the probe is connected.
 
+To assign a **project-relative** 1.0 NTU reference to the current A0 voltage,
+keep the sensor in the same sample, then run `python3
+deploy/calibrate_pi_turbidity_a0.py --check` followed by `python3
+deploy/calibrate_pi_turbidity_a0.py --apply` on the Pi. The second command
+waits for five distinct stable cached sensor samples, backs up the old A3
+record, and writes an A0 record. Restart `verde.service` at a safe time to load
+it. The drinking-water reference is assigned by the project, not certified;
+the resulting number is an estimate and should not be presented as a validated
+physical NTU measurement. The probe's analog output and ADC input voltage
+should be independently checked before treating this reading as calibrated.
+
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 
 ## NFT planting records

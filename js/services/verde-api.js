@@ -182,7 +182,11 @@ function liveSensorBadge(key, sensor, value) {
 }
 
 function liveSensorDetail(key, sensor, healthStatus) {
-  if (["ph", "ec", "turbidity"].includes(key)) return "";
+  if (["ph", "ec"].includes(key)) return "";
+  if (key === "turbidity") {
+    const reference = finiteNumber(sensor.reference_voltage_V);
+    return reference === null ? "" : `Project NTU estimate · user-assigned 1.0 reference at ${reference.toFixed(4)} V`;
+  }
   const details = [];
   const backendStatus = String(sensor.status ?? healthStatus ?? "").trim();
   if (backendStatus) details.push(backendStatus);
@@ -191,10 +195,6 @@ function liveSensorDetail(key, sensor, healthStatus) {
   if (filteredVoltage !== null) details.push(`Filtered ${filteredVoltage.toFixed(4)} V`);
   if (sensor.spike === true) details.push("Spike flagged by backend");
 
-  if (key === "turbidity") {
-    const reference = finiteNumber(sensor.reference_voltage_V);
-    if (reference !== null) details.push(`1.00 NTU reference ${reference.toFixed(4)} V`);
-  }
   return details.join(" · ");
 }
 
@@ -745,7 +745,7 @@ export class MockVerdeApi {
       sensors: [
         { label: "pH", value: "5.9", unit: "", status: "Optimal", icon: "◈" },
         { label: "EC", value: "1.5", unit: "mS/cm", status: "Optimal", icon: "⌁" },
-        { label: "Turbidity", value: "1.00", unit: "NTU", status: "Optimal", icon: "≋", detail: "Project 1.00 NTU reference calibration" },
+        { label: "Turbidity", value: "1.00", unit: "NTU", status: "Optimal", icon: "≋", detail: "Project NTU estimate · user-assigned 1.0 reference" },
         { label: "Water Temperature", value: "22.1", unit: "°C", status: "Optimal", icon: "♨" },
         { label: "Humidity", value: "62", unit: "%", status: "Suboptimal", icon: "○" },
       ],

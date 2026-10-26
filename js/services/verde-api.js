@@ -372,7 +372,29 @@ function historyLabel(timestamp, range) {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
 }
 
-export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth = null) {
+export function normalizeSimulatedPest(payload, now = Date.now()) {
+  const checked = Date.parse(payload?.checked_at_utc ?? "");
+  const captured = Date.parse(payload?.source_frame_mtime_utc ?? "");
+  const count = payload?.visible_prop_count;
+  const fresh = Number.isFinite(checked) && Number.isFinite(captured)
+    && checked <= now + 5_000 && captured <= checked + 5_000
+    && now - checked <= 130_000 && now - captured <= 150_000;
+  if (payload?.status !== "ok" || !fresh || typeof payload?.simulated_pest_detected !== "boolean"
+      || !Number.isInteger(count) || count < 0 || count > 100
+      || (count > 0) !== payload.simulated_pest_detected) {
+    return { detected: null, status: "Simulated pest check unavailable",
+      detail: "No recent verified printed-prop result.", frameUrl: null };
+  }
+  const timestamp = new Date(checked).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return {
+    detected: payload.simulated_pest_detected,
+    status: payload.simulated_pest_detected ? "Simulated Pest Detected" : "No Simulated Pest Detected",
+    detail: `${count} printed insect prop${count === 1 ? "" : "s"} detected in a camera photo checked at ${timestamp}. Prototype only; no GSM or automation action.`,
+    frameUrl: `/simulated-pest/latest-annotated.jpg?v=${encodeURIComponent(payload.checked_at_utc)}`
+  };
+}
+
+export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth = null, simulatedPest = null) {
   if (!state || typeof state !== "object" || !state.sensors || !state.automation) {
     throw new Error("The VERDE backend returned an invalid status response.");
   }
@@ -405,6 +427,7 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
     plant: {
       condition: resultValue(plant),
       status: plant.status ?? "UNAVAILABLE",
+      simulatedPest: normalizeSimulatedPest(simulatedPest),
       pestDetected: pest.value === "Pest Detected" ? true : pest.value === "No Pest Detected" ? false : null,
       pestStatus: resultValue(pest),
       pestDetail: pest.detail || "Pest analysis detail is unavailable.",
@@ -571,16 +594,17 @@ export class VerdeApi {
     // /api/status, but do not have the newer sensor detail routes. Those
     // optional routes must not make a working camera appear faulty.
     const state = await this.request("/api/status");
-    const [liveSensors, sensorHealth] = await Promise.all([
+    const [liveSensors, sensorHealth, simulatedPest] = await Promise.all([
       this.optionalRequest("/api/sensors/latest"),
-      this.optionalRequest("/api/sensors/health")
+      this.optionalRequest("/api/sensors/health"),
+      this.request(`/simulated-pest/latest.json?v=${Date.now()}`).catch(() => null)
     ]);
     const fallbackSensors = liveSensors ?? (state.sensors ? {
       sensors: state.sensors,
       timestamp: state.timestamp
     } : null);
     const fallbackHealth = sensorHealth ?? state.sensor_health ?? state.sensors_health ?? state.health ?? null;
-    return normalizeBackendSnapshot(state, fallbackSensors, fallbackHealth);
+    return normalizeBackendSnapshot(state, fallbackSensors, fallbackHealth, simulatedPest);
   }
 
   async optionalRequest(path) {

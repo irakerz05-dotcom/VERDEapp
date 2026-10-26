@@ -26,5 +26,5 @@ test("page exposes mobile installation metadata and current assets", async () =>
   const page = await read("index.html");
   assert.match(page, /mobile-web-app-capable/);
   assert.match(page, /manifest\.webmanifest/);
-  assert.match(page, /js\/app\.js\?v=32/);
+  assert.match(page, /js\/app\.js\?v=33/);
 });

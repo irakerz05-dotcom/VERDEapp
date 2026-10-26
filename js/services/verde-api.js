@@ -171,7 +171,7 @@ function liveSensorBadge(key, sensor, value) {
 
   if (key === "ambient_humidity") {
     return value >= HUMIDITY_OPTIMAL_MIN && value <= HUMIDITY_OPTIMAL_MAX
-      ? "Optimal" : "Suboptimal";
+      ? "OPTIMAL" : "SUBOPTIMAL";
   }
 
   const classification = String(sensor.classification ?? "").trim();
@@ -774,7 +774,7 @@ export class MockVerdeApi {
         { label: "EC", value: "1.5", unit: "mS/cm", status: "Optimal", icon: "⌁" },
         { label: "Turbidity", value: "1.00", unit: "NTU", status: "Optimal", icon: "≋", detail: "Project NTU estimate · user-assigned 1.0 reference" },
         { label: "Water Temperature", value: "22.1", unit: "°C", status: "Optimal", icon: "♨" },
-        { label: "Humidity", value: "62", unit: "%", status: "Suboptimal", icon: "○" },
+        { label: "Humidity", value: "62", unit: "%", status: "SUBOPTIMAL", icon: "○" },
       ],
       waterQuality: {
         status: "Optimal",

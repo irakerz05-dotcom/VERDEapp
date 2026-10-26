@@ -71,7 +71,7 @@ test("a valid live value without a status remains visible; explicit faults still
     ambient_humidity: { value: 65 }
   } });
   assert.equal(readings.find((item) => item.label === "EC").value, "1.4500");
-  assert.equal(readings.find((item) => item.label === "Humidity").status, "Optimal");
+  assert.equal(readings.find((item) => item.label === "Humidity").status, "OPTIMAL");
 
   const withFault = normalizeLiveSensorSnapshot({ sensors: {
     ec: { value_mScm: 1.45, status: "CONNECTED" }
@@ -115,10 +115,10 @@ test("a project-reference NTU reading remains numeric with metadata retained", (
   assert.match(reading.detail, /0\.5762 V/);
 });
 
-test("live humidity is Optimal only from 65% through 78% inclusive", () => {
+test("live humidity is OPTIMAL only from 65% through 78% inclusive", () => {
   for (const [value, expected] of [
-    [64.9, "Suboptimal"], [65, "Optimal"], [72, "Optimal"],
-    [78, "Optimal"], [78.1, "Suboptimal"]
+    [64.9, "SUBOPTIMAL"], [65, "OPTIMAL"], [72, "OPTIMAL"],
+    [78, "OPTIMAL"], [78.1, "SUBOPTIMAL"]
   ]) {
     const humidity = normalizeLiveSensorSnapshot({ sensors: {
       ambient_humidity: { value, status: "CONNECTED: DHT11" }
@@ -147,9 +147,9 @@ test("water temperature and humidity fail and recover independently", () => {
   const failedHumidity = { value: null, status: "ERROR: incomplete buffer", read_error: "incomplete buffer" };
   const cases = [
     [failedWater, failedHumidity, "Faulty Sensors", "Faulty Sensors"],
-    [failedWater, liveHumidity, "Faulty Sensors", "Optimal"],
+    [failedWater, liveHumidity, "Faulty Sensors", "OPTIMAL"],
     [liveWater, failedHumidity, "CONNECTED", "Faulty Sensors"],
-    [liveWater, liveHumidity, "CONNECTED", "Optimal"],
+    [liveWater, liveHumidity, "CONNECTED", "OPTIMAL"],
     [liveWater, failedHumidity, "CONNECTED", "Faulty Sensors"]
   ];
   for (const [water, humidity, expectedWater, expectedHumidity] of cases) {
@@ -162,7 +162,7 @@ test("water temperature and humidity fail and recover independently", () => {
     assert.equal(temperatureCard.status, expectedWater);
     assert.equal(humidityCard.status, expectedHumidity);
     assert.equal(temperatureCard.value, expectedWater === "CONNECTED" ? "25.125" : "—");
-    assert.equal(humidityCard.value, expectedHumidity === "Optimal" ? "72" : "—");
+    assert.equal(humidityCard.value, expectedHumidity === "OPTIMAL" ? "72" : "—");
   }
 });
 

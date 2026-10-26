@@ -93,7 +93,7 @@ def summarize(samples):
             "filtered_voltage_sd_V": statistics.pstdev(filtered)}
 
 
-def capture(api=API, timeout=MAX_WAIT_SECONDS):
+def capture(api=API, timeout=MAX_WAIT_SECONDS, after_sample=0):
     seen = set()
     samples = []
     deadline = time.monotonic() + timeout
@@ -104,7 +104,7 @@ def capture(api=API, timeout=MAX_WAIT_SECONDS):
             print(f"Waiting for a valid A0 sample: {exc}", flush=True)
             time.sleep(5)
             continue
-        if item["sample"] not in seen:
+        if item["sample"] > after_sample and item["sample"] not in seen:
             seen.add(item["sample"])
             samples.append(item)
             print(f"Sample {len(samples)}/{SAMPLES}: #{item['sample']} A0={item['filtered_voltage_V']:.6f} V", flush=True)
@@ -141,14 +141,14 @@ def record_for(samples, summary):
     }
 
 
-def save_record(record, path=RECORD_PATH):
+def save_record(record, path=RECORD_PATH, replace_existing=False):
     backup = None
     if path.exists():
         with path.open(encoding="utf-8") as handle:
             prior = json.load(handle)
-        if prior.get("ads_channel") == "A0":
+        if prior.get("ads_channel") == "A0" and not replace_existing:
             raise ValueError("An A0 reference already exists; refusing to replace it automatically")
-        backup = path.with_name(f"{path.name}.before_a0_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        backup = path.with_name(f"{path.name}.before_a0_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}")
         shutil.copy2(path, backup)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent,
                                  prefix=f".{path.name}.", delete=False) as handle:
@@ -171,7 +171,11 @@ def main():
     choice = parser.add_mutually_exclusive_group(required=True)
     choice.add_argument("--check", action="store_true")
     choice.add_argument("--apply", action="store_true")
+    parser.add_argument("--replace-existing", action="store_true",
+                        help="Replace an existing A0 reference for a new sensor; back up the old record")
     args = parser.parse_args()
+    if args.replace_existing and not args.apply:
+        parser.error("--replace-existing requires --apply")
     verify_service_source()
     current = validate_snapshot(read_snapshot())
     threshold = local_critical_limit()
@@ -184,9 +188,9 @@ def main():
         return
     if threshold is not None:
         raise SystemExit("A critical turbidity limit is configured. Review its impact on safety/SMS before assigning this uncertified NTU estimate; no record was changed.")
-    samples, summary = capture()
+    samples, summary = capture(after_sample=current["sample"])
     record = record_for(samples, summary)
-    backup = save_record(record)
+    backup = save_record(record, replace_existing=args.replace_existing)
     print(f"Saved A0 reference: {summary['reference_voltage_V']:.6f} V = project-assigned 1.0 NTU")
     print(f"Prior record backup: {backup}")
     print("The service was NOT restarted. Restart at a safe time to load the reference.")

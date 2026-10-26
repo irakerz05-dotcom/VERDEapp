@@ -56,6 +56,16 @@ class TurbidityReferenceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "already exists"):
                 save_record(record, path)
 
+    def test_explicit_a0_replacement_preserves_old_reference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "turbidity_calibration_ntu.json"
+            old = {"ads_channel": "A0", "reference_voltage_V": 0.575875}
+            new = {"ads_channel": "A0", "reference_voltage_V": 0.8125}
+            path.write_text(json.dumps(old))
+            backup = save_record(new, path, replace_existing=True)
+            self.assertEqual(json.loads(path.read_text()), new)
+            self.assertEqual(json.loads(backup.read_text()), old)
+
 
 if __name__ == "__main__":
     unittest.main()

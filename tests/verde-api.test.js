@@ -103,6 +103,25 @@ test("unrelated ADS1115 A0 voltage is never shown as turbidity", () => {
   assert.equal(disconnected.value, "—");
 });
 
+test("GPIO5 turbidity reports only a fresh digital level, never NTU", () => {
+  for (const [level, expected] of [[0, "LOW"], [1, "HIGH"]]) {
+    const reading = normalizeLiveSensorSnapshot({
+      timestamp: "2026-10-26T20:00:00+08:00",
+      sensors: { turbidity: { measurement_type: "DIGITAL_THRESHOLD_ONLY",
+        status: "DIGITAL_THRESHOLD", digital_level: level, value_ntu: null } }
+    }).find((item) => item.label === "Turbidity");
+    assert.equal(reading.value, expected);
+    assert.equal(reading.unit, "");
+    assert.equal(reading.status, "DIGITAL ONLY");
+    assert.equal(reading.isRaw, true);
+  }
+  const missing = normalizeLiveSensorSnapshot({ sensors: { turbidity: {
+    measurement_type: "DIGITAL_THRESHOLD_ONLY", status: "ERROR", digital_level: null
+  } } }).find((item) => item.label === "Turbidity");
+  assert.equal(missing.value, "—");
+  assert.equal(missing.status, "Faulty Sensors");
+});
+
 test("a project-reference NTU reading remains numeric with metadata retained", () => {
   const sensor = { value_ntu: 1.0, status: "CALIBRATED", classification: "OPTIMAL",
     reference_voltage_V: 0.5762, raw_voltage_V: 0.5761, filtered_voltage_V: 0.5762 };

@@ -132,14 +132,19 @@ EC/TDS cards show the live electrical voltage together with
 `CONNECTED — CALIBRATION REQUIRED`. Raw volts are not relabeled as calibrated
 pH, mS/cm, ppm or NTU values.
 
-The installed DFRobot SEN0189 turbidity board's signal is wired to Raspberry
+The installed DFRobot SEN0189 turbidity board's D output is wired to Raspberry
 Pi GPIO5 (physical pin 29), separate from the ADS1115. The running Pi backend
-still reads ADS1115 A0, so its voltage is unrelated to turbidity. The board's
-D/A switch selects either a one-bit digital threshold output or an analog
-voltage; GPIO5 alone cannot provide a continuous NTU measurement. The
-dashboard keeps turbidity unavailable until the switch setting and usable
-signal path are confirmed and the backend is updated. The legacy A0/A3
-calibration utilities in `deploy/` are not applicable to this connection.
+still reads ADS1115 A0, so its voltage is unrelated to turbidity. D mode
+provides a one-bit digital threshold output, not continuous NTU. The guarded
+`deploy/apply_pi_turbidity_gpio5.py --check` checks a pending Pi source change
+without applying it. `--apply --signal-3v3-verified` backs up the source
+without restarting the service, and must be used only after the signal is
+verified. **Before a service restart, verify the D output is safe for the Pi's
+3.3 V GPIO input.** The board is powered at 5 V and its HIGH output voltage is
+not yet verified. Once safely installed, the app displays only HIGH or LOW and
+keeps numeric turbidity unavailable for automation and Random Forest. The
+digital threshold polarity and potentiometer setting also remain unverified.
+The legacy A0/A3 calibration utilities in `deploy/` do not apply to GPIO5.
 A drinking-water sample designated 1.0 NTU by the project is a reference
 assumption, not a certified measurement or a live sensor reading.
 

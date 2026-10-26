@@ -275,6 +275,18 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
         lastReadingAt: sensor.read_timestamp ?? payload.timestamp ?? null
       };
     }
+    if (key === "turbidity" && sensor.measurement_type === "DIGITAL_THRESHOLD_ONLY"
+        && sensor.status === "DIGITAL_THRESHOLD" && [0, 1].includes(sensor.digital_level)) {
+      return {
+        ...presentation,
+        value: sensor.digital_level === 1 ? "HIGH" : "LOW",
+        unit: "",
+        status: "DIGITAL ONLY",
+        detail: "GPIO5 threshold signal; no NTU measurement.",
+        isRaw: true,
+        lastReadingAt: payload.timestamp ?? null
+      };
+    }
     // This installation's turbidity converter is not the ADS1115. Raw A0
     // voltage is unrelated and must never be presented as turbidity evidence.
     const faulty = isFaultySensorReading(key, value, sensor, healthStatus);

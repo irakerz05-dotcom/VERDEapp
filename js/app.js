@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=41";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=41";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=42";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=42";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -620,7 +620,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=41", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=42", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

@@ -346,6 +346,16 @@ test("backend history filters ranges, orders samples, and keeps empty ranges hon
   assert.equal(normalizeBackendHistory([], "7 Days", now).current, "—");
 });
 
+test("live history requests the selected time range from the Pi", async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    return { ok: true, status: 200, json: async () => ({ rows: [] }) };
+  };
+  await new VerdeApi({ fetchImpl }).getHistory("7 Days");
+  assert.deepEqual(calls, ["/api/history?range=7%20Days", "/api/events"]);
+});
+
 test("history supports every sensor and selects an available metric without inventing data", () => {
   const now = new Date("2026-09-25T12:00:00Z");
   const rows = [

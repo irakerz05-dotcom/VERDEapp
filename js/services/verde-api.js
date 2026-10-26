@@ -618,7 +618,7 @@ export class VerdeApi {
 
   async getHistory(range = "Today", selectedMetric = null) {
     const [historyPayload, eventPayload] = await Promise.all([
-      this.request("/api/history"),
+      this.request(`/api/history?range=${encodeURIComponent(range)}`),
       this.request("/api/events")
     ]);
     return normalizeBackendHistory(historyPayload?.rows, range, new Date(), selectedMetric, eventPayload?.rows);

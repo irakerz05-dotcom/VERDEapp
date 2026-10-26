@@ -149,6 +149,24 @@ should be independently checked before treating this reading as calibrated.
 
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 
+## Live sensor history
+
+History records one row for each new integrated Pi sensor acquisition in a
+separate SQLite table. It stores actual pH, EC, turbidity, water temperature,
+and humidity values when valid; failed or stale readings remain empty. The
+History page requests bounded views for Today, 24 Hours, and 7 Days.
+Existing monitoring snapshots and automation behavior are unchanged.
+Previously empty monitoring rows cannot be turned into sensor readings.
+
+On the Pi, fetch `feature/live-sensor-history` in VERDE-Software and pull this
+PWA branch. From `~/VERDEapp`, run
+`python3 deploy/apply_pi_sensor_history.py --check`, then
+`python3 deploy/apply_pi_sensor_history.py --apply`. The installer checks
+reviewed code anchors, backs up changed backend files, and preserves the
+existing database. Restart `verde.service` at a safe time; its restart may
+briefly put actuators SAFE/OFF and reopen SMS incidents. New History points
+should appear after the next sensor acquisition (normally about 30 seconds).
+
 ## NFT planting records
 
 The Plants page has 12 fixed positions: top NFT row Plant 1–6 from right to

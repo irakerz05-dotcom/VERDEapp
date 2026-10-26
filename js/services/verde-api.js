@@ -155,8 +155,7 @@ function liveSensorValue(key, sensor) {
 function liveSensorUnit(key, sensor) {
   if (key === "ph") return "pH";
   if (key === "ec") return "mS/cm";
-  if (key === "turbidity") return finiteNumber(sensor.reference_voltage_V) !== null
-    && finiteNumber(sensor.value_ntu) !== null ? "est. NTU" : "NTU";
+  if (key === "turbidity") return "NTU";
   if (key === "water_temperature") return "°C";
   if (key === "ambient_humidity") return "%";
   return sensor.unit ?? "";
@@ -770,7 +769,7 @@ export class MockVerdeApi {
       sensors: [
         { label: "pH", value: "5.9", unit: "", status: "Optimal", icon: "◈" },
         { label: "EC", value: "1.5", unit: "mS/cm", status: "Optimal", icon: "⌁" },
-        { label: "Turbidity", value: "1.00", unit: "est. NTU", status: "Optimal", icon: "≋", detail: "Project NTU estimate · user-assigned 1.0 reference" },
+        { label: "Turbidity", value: "1.00", unit: "NTU", status: "Optimal", icon: "≋", detail: "Project NTU estimate · user-assigned 1.0 reference" },
         { label: "Water Temperature", value: "22.1", unit: "°C", status: "Optimal", icon: "♨" },
         { label: "Humidity", value: "62", unit: "%", status: "Suboptimal", icon: "○" },
       ],

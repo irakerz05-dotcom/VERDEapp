@@ -227,6 +227,22 @@ number uses a project-assigned drinking-water reference, so record that
 limitation with any dataset. Re-running the command requires a new output
 filename; existing exports are never overwritten.
 
+To record a specific physical solution as its own batch, let the probe settle
+in that solution, then run on the Pi:
+
+```bash
+cd ~/VERDEapp
+python3 deploy/capture_pi_water_batch.py --batch-id solution-one
+```
+
+The command waits for a new complete cached acquisition after it starts and
+appends one row to `~/verde-water-quality-batches.csv`. It does not trigger a
+hardware read. Use the **same** batch ID for repeat readings of one physical
+solution; use a new ID only when the physical water sample changes. The
+reference label, method and label time stay blank until independently
+established. Do not infer a class from the prototype, liquid color, or a new
+batch ID. A failed water sensor makes capture fail without writing a row.
+
 ## Development workflow across computers
 
 GitHub is the source of truth. Before switching computers, commit and push your finished work:

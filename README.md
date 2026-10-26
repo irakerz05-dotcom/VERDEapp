@@ -205,6 +205,28 @@ the backend files it changes and does not restart the service. Restart
 `water_quality_experimental` and `fusion`. A missing or faulty water probe
 must leave the experimental result unavailable and the fusion result Low.
 
+### Collect real readings for later validation
+
+The Pi already stores individual acquisitions in `sensor_samples`. To export
+complete four-sensor rows without interrupting the running service, pull this
+PWA branch on the Pi and run:
+
+```bash
+cd ~/VERDEapp
+python3 deploy/export_pi_water_quality_samples.py \
+  --output ~/verde-water-quality-unlabeled-20261026.csv
+```
+
+The CSV is created outside Git, includes at most one row per 30 minutes, and
+leaves its independent-reference label fields empty. Rows with missing or
+invalid pH, EC, water temperature, or turbidity are excluded. Record the
+physical water-sample batch and an independently measured or assessed label
+before using the rows to evaluate a real model. The prototype's prediction
+must not be copied into the reference-label column. The current turbidity
+number uses a project-assigned drinking-water reference, so record that
+limitation with any dataset. Re-running the command requires a new output
+filename; existing exports are never overwritten.
+
 ## Development workflow across computers
 
 GitHub is the source of truth. Before switching computers, commit and push your finished work:

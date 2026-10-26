@@ -1,12 +1,12 @@
 const CACHE_PREFIX = "verde-pwa-";
-const CACHE = `${CACHE_PREFIX}v40`;
+const CACHE = `${CACHE_PREFIX}v41`;
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=40",
-  "./js/app.js?v=40",
-  "./js/verde-ui.js?v=40",
-  "./js/services/verde-api.js?v=40",
+  "./styles.css?v=41",
+  "./js/app.js?v=41",
+  "./js/verde-ui.js?v=41",
+  "./js/services/verde-api.js?v=41",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

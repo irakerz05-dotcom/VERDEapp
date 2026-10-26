@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=40";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=40";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=41";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=41";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -100,7 +100,7 @@ function renderCard(sensor) {
   return `<article class="sensor-card">
     <span class="sensor-icon" aria-hidden="true">${safe(sensor.icon)}</span>
     <div><h2>${safe(sensor.label)}</h2><p class="reading">${safe(sensor.value)}<small>${safe(sensor.unit)}</small></p>
-    ${sensor.isAssignedReference ? "" : `<span class="status ${tone}"><b aria-hidden="true">${marker}</b>${safe(sensor.status)}</span>`}
+    <span class="status ${tone}"><b aria-hidden="true">${marker}</b>${safe(sensor.status)}</span>
     ${showDetail ? `<p class="sensor-detail">${safe(sensor.detail)}</p>` : ""}</div>
   </article>`;
 }
@@ -620,7 +620,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=40", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=41", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

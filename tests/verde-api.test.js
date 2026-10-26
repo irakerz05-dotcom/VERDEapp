@@ -80,7 +80,7 @@ test("a valid live value without a status remains visible; explicit faults still
   assert.equal(withFault.find((item) => item.label === "EC").status, "Faulty Sensors");
 });
 
-test("A0 voltage remains visible when only the old A3 NTU calibration is invalid", () => {
+test("unrelated ADS1115 A0 voltage is never shown as turbidity", () => {
   const health = { sensors: { turbidity: "UNAVAILABLE: accepted turbidity calibration record is missing or invalid" } };
   const sensor = {
     value_ntu: null,
@@ -91,45 +91,16 @@ test("A0 voltage remains visible when only the old A3 NTU calibration is invalid
   };
   const reading = normalizeLiveSensorSnapshot({ sensors: { turbidity: sensor } }, health)
     .find((item) => item.label === "Turbidity");
-  assert.equal(reading.value, "0.0720");
-  assert.equal(reading.unit, "V");
-  assert.equal(reading.status, "Uncalibrated signal");
-  assert.equal(reading.isRaw, true);
-  assert.match(reading.detail, /not NTU/);
+  assert.equal(reading.value, "—");
+  assert.equal(reading.unit, "NTU");
+  assert.equal(reading.status, "Faulty Sensors");
+  assert.equal(reading.isRaw, false);
 
   const disconnected = normalizeLiveSensorSnapshot({ sensors: { turbidity: sensor } },
     { sensors: { turbidity: "NOT CONNECTED" } })
     .find((item) => item.label === "Turbidity");
   assert.equal(disconnected.status, "Faulty Sensors");
   assert.equal(disconnected.value, "—");
-});
-
-test("operator-assigned drinking-water NTU stays display-only and unverified", () => {
-  const sensor = {
-    value_ntu: null,
-    status: "UNAVAILABLE: accepted turbidity calibration record is missing or invalid",
-    filtered_voltage_V: 3.606875,
-    raw_voltage_V: 3.613375
-  };
-  const payload = { timestamp: "2026-10-26T22:15:00+08:00", sensors: { turbidity: sensor } };
-  const assigned = normalizeLiveSensorSnapshot(payload).find((item) => item.label === "Turbidity");
-  assert.equal(assigned.value, "1.0000");
-  assert.equal(assigned.unit, "NTU");
-  assert.equal(assigned.status, "ASSIGNED / UNVERIFIED");
-  assert.equal(assigned.isAssignedReference, true);
-  assert.equal(assigned.detail, "");
-  assert.equal(assigned.isRaw, true);
-  assert.equal(payload.sensors.turbidity.value_ntu, null);
-
-  const changed = normalizeLiveSensorSnapshot({ timestamp: payload.timestamp, sensors: { turbidity: {
-    ...sensor, filtered_voltage_V: 3.5
-  } } }).find((item) => item.label === "Turbidity");
-  assert.equal(changed.unit, "V");
-  assert.equal(changed.status, "Uncalibrated signal");
-
-  const nextDay = normalizeLiveSensorSnapshot({ ...payload,
-    timestamp: "2026-10-27T00:01:00+08:00" }).find((item) => item.label === "Turbidity");
-  assert.equal(nextDay.unit, "V");
 });
 
 test("a project-reference NTU reading remains numeric with metadata retained", () => {

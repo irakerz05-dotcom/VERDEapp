@@ -128,52 +128,20 @@ URLs supplied by the backend. It preserves missing sensor/model values as
 unavailable instead of fabricating results.
 
 When the backend supplies ADS1115 `raw_value` and `raw_unit` metadata, the pH,
-EC/TDS and turbidity cards show the live electrical voltage together with
+EC/TDS cards show the live electrical voltage together with
 `CONNECTED — CALIBRATION REQUIRED`. Raw volts are not relabeled as calibrated
 pH, mS/cm, ppm or NTU values.
 
-When the turbidity backend rejects an incompatible calibration but still provides
-an A0 voltage, the turbidity card shows that live voltage as an uncalibrated
-signal in V. It does not report NTU or claim that the probe is connected.
-
-To assign a **project-relative** 1.0 NTU reference to the current A0 voltage,
-keep the sensor in the same sample, then run `python3
-deploy/calibrate_pi_turbidity_a0.py --check` followed by `python3
-deploy/calibrate_pi_turbidity_a0.py --apply` on the Pi. The second command
-waits for five distinct stable cached sensor samples, backs up the old A3
-record, and writes an A0 record. Restart `verde.service` at a safe time to load
-it. The drinking-water reference is assigned by the project, not certified;
-the resulting number is an estimate and should not be presented as a validated
-physical NTU measurement. The probe's analog output and ADC input voltage
-should be independently checked before treating this reading as calibrated.
-
-For a replacement probe connected to **A3**, run `python3
-deploy/apply_pi_turbidity_a3.py --check` and then `--apply` on the Pi. This
-backs up the untracked sensor-service source; it does not restart the service
-or change the old reference. After restarting `verde.service`, verify the raw
-A3 voltage using `python3 deploy/calibrate_pi_turbidity_a0.py --channel A3
---check`. If the guarded voltage check passes and no critical turbidity limit
-is configured, capture the new project reference with `python3
-deploy/calibrate_pi_turbidity_a0.py --channel A3 --apply`; the old A0 record is
-backed up. Restart the service to load the A3 record. If A3 exceeds the
-guarded range, stop: no reference is written. The new probe cannot inherit
-the old probe's reference.
-The A3 capture guard rejects raw or filtered samples at or above 3.29 V,
-slightly below this Pi's 3.3 V ADC supply. A reading close to that limit is
-only a software observation; it does not establish that the sensor output
-will stay within the ADC's input limits in other water samples.
-If the turbidity analog lead is moved back to A0, use the same guarded
-installer with `--channel A0 --check`, then `--channel A0 --apply`. Restart
-`verde.service` and run the calibration capture with `--channel A0`. The A3
-reference is backed up before the new A0 reference is saved; do not reuse the
-old A0 reference from a different probe.
-When A0 reports an out-of-range voltage near the operator's designated
-drinking-water sample on 2026-10-26 (3.606875 V ±0.08 V), the Turbidity card
-shows the user-assigned 1.0 NTU without a badge. This is display-only: the Pi
-still reports the sensor unavailable, and its safety, history, SMS and
-sensor-vision fusion paths do not receive an NTU reading from this assignment.
-The annotation expires the next day so it cannot silently follow the probe
-into another water sample.
+The installed DFRobot SEN0189 turbidity board's signal is wired to Raspberry
+Pi GPIO5 (physical pin 29), separate from the ADS1115. The running Pi backend
+still reads ADS1115 A0, so its voltage is unrelated to turbidity. The board's
+D/A switch selects either a one-bit digital threshold output or an analog
+voltage; GPIO5 alone cannot provide a continuous NTU measurement. The
+dashboard keeps turbidity unavailable until the switch setting and usable
+signal path are confirmed and the backend is updated. The legacy A0/A3
+calibration utilities in `deploy/` are not applicable to this connection.
+A drinking-water sample designated 1.0 NTU by the project is a reference
+assumption, not a certified measurement or a live sensor reading.
 
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 

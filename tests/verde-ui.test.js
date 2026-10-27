@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "../js/verde-ui.js";
+import { buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "../js/verde-ui.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -35,6 +35,14 @@ test("chart geometry contains only finite coordinates", () => {
   assert.ok(chart.points.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y)));
 });
 
+test("history values display four decimals without changing stored precision", () => {
+  assert.equal(formatHistoryValue(1.5034913245873889), "1.5035");
+  assert.equal(formatHistoryValue(65), "65.0000");
+  assert.equal(formatHistoryValue(-2.5), "-2.5000");
+  assert.equal(formatHistoryValue(null), "—");
+  assert.equal(formatHistoryValue(Number.NaN), "—");
+});
+
 test("service-worker assets match versioned index and module references", async () => {
   const [index, worker, app] = await Promise.all([
     readFile(`${root}index.html`, "utf8"),
@@ -42,17 +50,17 @@ test("service-worker assets match versioned index and module references", async 
     readFile(`${root}js/app.js`, "utf8")
   ]);
 
-  assert.match(index, /href="styles\.css\?v=47"/);
-  assert.match(index, /src="js\/app\.js\?v=47"/);
-  assert.match(app, /services\/verde-api\.js\?v=47/);
-  assert.match(app, /verde-ui\.js\?v=47/);
+  assert.match(index, /href="styles\.css\?v=48"/);
+  assert.match(index, /src="js\/app\.js\?v=48"/);
+  assert.match(app, /services\/verde-api\.js\?v=48/);
+  assert.match(app, /verde-ui\.js\?v=48/);
   assert.match(app, /sensor-detail/);
   assert.match(app, /Problem timeline/);
   assert.match(app, /Alerts & activity/);
-  assert.match(worker, /"\.\/styles\.css\?v=47"/);
-  assert.match(worker, /"\.\/js\/app\.js\?v=47"/);
-  assert.match(worker, /"\.\/js\/verde-ui\.js\?v=47"/);
-  assert.match(worker, /"\.\/js\/services\/verde-api\.js\?v=47"/);
+  assert.match(worker, /"\.\/styles\.css\?v=48"/);
+  assert.match(worker, /"\.\/js\/app\.js\?v=48"/);
+  assert.match(worker, /"\.\/js\/verde-ui\.js\?v=48"/);
+  assert.match(worker, /"\.\/js\/services\/verde-api\.js\?v=48"/);
   const dashboard = app.split("function renderDashboard(data) {")[1]?.split("function plantAge(slot) {")[0];
   const plants = app.split("function renderPlants(data, slots = null) {")[1];
   assert.ok(dashboard);

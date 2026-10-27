@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=47";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=47";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=48";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=48";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -393,7 +393,10 @@ function renderHistory(data, history) {
     ? `M${chart.points[0].x} 125 ${chart.points.map((point) => `L${point.x} ${point.y}`).join(" ")} L${chart.points.at(-1).x} 125 Z`
     : "";
   const unit = history.unit ? ` ${history.unit}` : "";
-  const valueWithUnit = (value) => value === "—" ? value : `${value}${unit}`;
+  const valueWithUnit = (value) => {
+    const formatted = formatHistoryValue(value);
+    return formatted === "—" ? formatted : `${formatted}${unit}`;
+  };
   const metricButtons = history.metrics.map((metric) => `<button type="button" data-history-metric="${safe(metric.key)}" class="metric-chip ${metric.key === history.metricKey ? "selected" : ""}" aria-pressed="${metric.key === history.metricKey}"><span>${safe(metric.label)}</span><small>${metric.sampleCount} sample${metric.sampleCount === 1 ? "" : "s"}</small></button>`).join("");
   const recent = history.samples.slice(-6).reverse().map((sample) => `<li><time datetime="${safe(sample.timestamp)}">${safe(sample.label)}</time><strong>${safe(valueWithUnit(sample.value))}</strong></li>`).join("");
   const incidentState = (incident) => incident.state === "RESOLVED" ? "Resolved" : incident.state === "ACKNOWLEDGED" ? "Acknowledged" : "Problem detected";
@@ -624,7 +627,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=47", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=48", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

@@ -38,6 +38,12 @@ export function niceTime(iso, locale) {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+export function formatHistoryValue(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  const formatted = value.toFixed(4);
+  return formatted === "-0.0000" ? "0.0000" : formatted;
+}
+
 export function buildChartGeometry(values, width = 284, height = 105, offsetX = 20, offsetY = 20) {
   const safeValues = values.map(Number).filter(Number.isFinite);
   if (!safeValues.length) return { path: "", points: [] };

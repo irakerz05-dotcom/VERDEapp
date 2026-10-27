@@ -505,7 +505,7 @@ function summarizeHistoryMetric(metric, samples) {
     current: values.length ? values.at(-1) : "—",
     minimum: values.length ? Math.min(...values) : "—",
     maximum: values.length ? Math.max(...values) : "—",
-    average: values.length ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)) : "—"
+    average: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : "—"
   };
 }
 

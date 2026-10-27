@@ -418,6 +418,17 @@ test("backend history filters ranges, orders samples, and keeps empty ranges hon
   assert.equal(normalizeBackendHistory([], "7 Days", now).current, "—");
 });
 
+test("history averages retain precision until the UI formats them", () => {
+  const now = new Date("2026-09-25T12:00:00Z");
+  const rows = [
+    { timestamp: "2026-09-25T10:00:00Z", turbidity: 1.23456 },
+    { timestamp: "2026-09-25T11:00:00Z", turbidity: 1.23458 }
+  ];
+  const history = normalizeBackendHistory(rows, "24 Hours", now, "turbidity");
+  assert.ok(Math.abs(history.average - 1.23457) < 1e-12);
+  assert.deepEqual(history.values, [1.23456, 1.23458]);
+});
+
 test("live history requests the selected time range from the Pi", async () => {
   const calls = [];
   const fetchImpl = async (url) => {

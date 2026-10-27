@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=46";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=46";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=47";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=47";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -351,7 +351,6 @@ function showPlantSlotDialog(slot, slots) {
 }
 
 function renderPlants(data, slots = null) {
-  const conditionTone = statusClass(data.plant.condition);
   const frameUrl = safeResourceUrl(data.plant.frameUrl, window.location.href);
   const camera = frameUrl
     ? `<figure class="camera-frame"><div class="nft-camera"><img src="${safe(frameUrl)}" alt="${data.plant.aiAnnotated ? "Latest AI-annotated plant detection frame" : "Latest camera frame"}" /><div class="nft-camera-labels"><div class="nft-camera-row top">${plantSlotRow(slots, 1, true)}</div><div class="nft-camera-row bottom">${plantSlotRow(slots, 6, true)}</div></div></div>${data.plant.aiAnnotated ? `<figcaption><b>Experimental AI overlay</b><span>Boxes and confidence come from the latest completed two-stage YOLO analysis.</span></figcaption>` : ""}</figure>`
@@ -372,9 +371,9 @@ function renderPlants(data, slots = null) {
   const content = `<section class="page-title"><h2>Plant Monitoring</h2><p>${safe(sourceLabel(data))}</p></section>
     ${camera}
     <section class="plant-panel nft-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">▦</span><div><p class="eyebrow">NFT PLANTING RECORDS</p><h2>10 fixed plant slots</h2></div></div><p class="classification-note">Each row is numbered right to left as seen in the camera: top Plant 1–5, bottom Plant 6–10. Dates are entered by the farmer; Camera results are matched to fixed slots when detections are available.</p>${slots?.supported ? `<div class="nft-rows" aria-label="Plant slots"><span>Top NFT row</span>${plantSlotRow(slots, 1)}<span>Bottom NFT row</span>${plantSlotRow(slots, 6)}</div>${data.stale || !data.online || slots.error ? `<p role="status">${safe(slots.error || "Planting records may be stale. Reconnect before editing.")}</p>` : ""}` : `<p role="status">Planting records are unavailable until the Pi backend is updated.</p>`}</section>
-    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT CONDITION</p><h2>Vision analysis</h2></div></div><div class="plant-result"><div><span class="status ${conditionTone}"><b aria-hidden="true">${conditionTone === "good" ? "✓" : conditionTone === "danger" ? "!" : "·"}</b>${safe(data.plant.status)}</span><strong>${safe(data.plant.condition)}</strong><small class="analysis-detail">${safe(data.plant.analysisDetail)}</small></div><div class="confidence"><span>Model confidence</span><strong>${safe(data.plant.confidence)}</strong></div></div><div class="classification-grid" aria-label="Latest per-class plant analysis">${classificationCards}</div><p class="classification-note">Harvest-Ready is an experimental visual indication and should be confirmed using growing-day records.</p></section>
+    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT CONDITION</p><h2>Vision analysis</h2></div></div><div class="classification-grid" aria-label="Latest per-class plant analysis">${classificationCards}</div><p class="classification-note">Harvest-Ready is an experimental visual indication and should be confirmed using growing-day records.</p></section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◌</span><div><p class="eyebrow">SIMULATED PEST TEST</p><h2>Printed insect props</h2></div></div><div class="notice ${simulated.detected === null ? "warn" : simulated.detected ? "danger" : "good"}"><b aria-hidden="true">${simulated.detected === false ? "✓" : "!"}</b><div><strong>${safe(simulated.status)}</strong><small>${safe(simulated.detail)}</small></div></div>${simulatedFrameUrl ? `<figure class="camera-frame"><img src="${safe(simulatedFrameUrl)}" alt="Latest annotated printed insect prop check" /><figcaption><b>Saved camera photo</b><span>Yellow boxes show detected printed props. Results refresh after the Pi finishes each scan.</span></figcaption></figure>` : ""}<p class="classification-note">Original backend pest model: ${safe(data.plant.pestStatus)}. ${safe(data.plant.pestDetail)} This separate demonstration never triggers GSM or dosing.</p></section>
-    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>Reliability indicator</h2></div></div><div class="fusion-result"><strong>${safe(data.fusion.confidence.toUpperCase())}</strong><p>${safe(data.fusion.reason)}</p></div>${data.fusionBySlot ? `<div class="nft-fusion" aria-label="Fusion confidence by NFT plant slot"><p class="classification-note">Water Quality prototype combined with each classified plant. Positions run right to left in each row. This is a descriptive confidence level.</p><span>Top NFT row</span>${plantFusionRow(data.fusionBySlot, 1)}<span>Bottom NFT row</span>${plantFusionRow(data.fusionBySlot, 6)}</div>` : ""}</section>`;
+    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>By plant slot</h2></div></div>${data.fusionBySlot ? `<div class="nft-fusion" aria-label="Fusion confidence by NFT plant slot"><p class="classification-note">Water Quality prototype combined with each classified plant. Positions run right to left in each row. This is a descriptive confidence level.</p><span>Top NFT row</span>${plantFusionRow(data.fusionBySlot, 1)}<span>Bottom NFT row</span>${plantFusionRow(data.fusionBySlot, 6)}</div>` : `<p class="classification-note" role="status">Per-plant fusion is unavailable.</p>`}</section>`;
   app.innerHTML = renderShell(content, data);
   document.querySelectorAll("[data-plant-slot]").forEach((button) => button.addEventListener("click", () => {
     if (data.stale || !data.online || slots?.error) {
@@ -625,7 +624,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=46", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=47", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

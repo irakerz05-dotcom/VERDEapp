@@ -7,14 +7,18 @@ mode safety evaluation, recipient settings, or camera/model configuration.
 """
 
 import argparse
+import json
+import os
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
 
 DEFAULT_TARGET = Path("/home/verde/VERDE-Sensor-Integration")
 PATCH = Path(__file__).with_name("pi_alerts_v1.patch")
+SERVICE_BLOCKS = Path(__file__).with_name("pi_alerts_service_blocks.json")
 TOUCHED = (
     "app/service.py",
     "app/notifications/__init__.py",
@@ -28,9 +32,34 @@ def run_git(root, *args):
                           capture_output=True, text=True, encoding="utf-8")
 
 
+def patch_service(source):
+    blocks = json.loads(SERVICE_BLOCKS.read_text(encoding="utf-8"))
+    for index, block in enumerate(blocks, 1):
+        old, new = block["old"], block["new"]
+        if source.count(old) != 1:
+            raise ValueError(f"Service alert anchor {index} differs from reviewed source")
+        source = source.replace(old, new, 1)
+    compile(source, "app/service.py", "exec")
+    return source
+
+
+def atomic_write(path, contents):
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(contents)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, path.stat().st_mode)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def check(root):
-    if not PATCH.is_file():
-        raise ValueError("Alert patch file is missing")
+    if not PATCH.is_file() or not SERVICE_BLOCKS.is_file():
+        raise ValueError("Alert patch files are missing")
     if not (root / "app/service.py").is_file():
         raise ValueError("Pi backend service source is missing")
     service = (root / "app/service.py").read_text(encoding="utf-8")
@@ -38,13 +67,13 @@ def check(root):
         if ("self.notification_retry_after = {}" in service
                 and (root / "app/notifications/alert_policy.py").is_file()
                 and "vision:slot:" in (root / "app/notifications/sms_text.py").read_text(encoding="utf-8")):
-            return True
+            return True, None
         raise ValueError("Alert patch is partially installed; inspect the backend before retrying")
     result = run_git(root, "apply", "--check", str(PATCH))
     if result.returncode:
         raise ValueError("Pi backend differs from reviewed alert anchors: "
                          + (result.stderr or result.stdout).strip())
-    return False
+    return False, patch_service(service)
 
 
 def main():
@@ -56,7 +85,7 @@ def main():
     args = parser.parse_args()
     root = args.target.resolve()
     try:
-        installed = check(root)
+        installed, desired_service = check(root)
     except (OSError, ValueError) as exc:
         parser.exit(1, f"Alert patch not ready: {exc}\n")
     if args.check:
@@ -76,6 +105,7 @@ def main():
     result = run_git(root, "apply", str(PATCH))
     if result.returncode:
         parser.exit(1, f"Alert patch failed: {(result.stderr or result.stdout).strip()}\n")
+    atomic_write(root / "app/service.py", desired_service)
     for relative in TOUCHED:
         source = root / relative
         compile(source.read_text(encoding="utf-8"), str(source), "exec")

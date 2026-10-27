@@ -129,6 +129,7 @@ const HARDWARE_FAULT_STATUS = /fault|error|not\s*connected|disconnected|offline|
 const SENSOR_DISPLAY_LIMITS = { ph: { maximum: 15 } };
 const HUMIDITY_OPTIMAL_MIN = 65;
 const HUMIDITY_OPTIMAL_MAX = 78;
+const MAX_RECOVERY_AGE_MS = 90_000;
 
 const DISPLAY_TO_BACKEND_MODE = {
   "Full Automation": "Full Automation Mode",
@@ -265,14 +266,22 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
       };
     }
     if (/recovering/i.test(String(sensor.status ?? sensorHealthStatus(healthStatus)))) {
+      const priorValue = key === "water_temperature" ? finiteNumber(sensor.last_valid_value_C) : null;
+      const priorTime = Date.parse(sensor.last_valid_measured_at);
+      const priorAge = Date.now() - priorTime;
+      const showPrior = sensor.read_error && sensor.stale !== true && sensor.retained !== true
+        && priorValue !== null && Number.isFinite(priorTime)
+        && priorAge >= 0 && priorAge <= MAX_RECOVERY_AGE_MS;
       return {
         ...presentation,
-        value: "—",
+        value: showPrior ? String(priorValue) : "—",
         unit: liveSensorUnit(key, sensor),
         status: "Recovering",
-        detail: String(sensor.read_error ?? sensor.status ?? "Retrying the sensor read."),
+        detail: showPrior ? "Last valid reading (not live); sensor is retrying."
+          : "Waiting for a fresh sensor reading.",
         isRaw: false,
-        lastReadingAt: sensor.read_timestamp ?? payload.timestamp ?? null
+        lastReadingAt: showPrior ? sensor.last_valid_measured_at
+          : sensor.read_timestamp ?? payload.timestamp ?? null
       };
     }
     if (key === "turbidity" && sensor.measurement_type === "DIGITAL_THRESHOLD_ONLY"
@@ -444,8 +453,10 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
     systemStatus: sensorHealth?.status ?? liveSensors?.system?.overall_status ?? state.system_status ?? "UNAVAILABLE",
     sensors,
     waterQuality: {
-      status: experimentalWater?.status === "EXPERIMENTAL"
-        ? `Prototype: ${resultValue(experimentalWater)}` : resultValue(waterDisplay),
+      status: experimentalWater?.status === "EXPERIMENTAL_RECOVERING"
+        ? `Prototype (recovering): ${resultValue(experimentalWater)}`
+        : experimentalWater?.status === "EXPERIMENTAL"
+          ? `Prototype: ${resultValue(experimentalWater)}` : resultValue(waterDisplay),
       summary: waterDisplay?.detail || waterDisplay?.status || "No classifier detail is available."
     },
     waterQualityPilot: realPilot ? {

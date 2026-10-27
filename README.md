@@ -320,9 +320,8 @@ preparation; a new batch name for the same water is not an independent test.
 The three-training-batch RF can be shown as an **experimental live comparison**.
 `deploy/apply_pi_real_rf_live.py` checks the existing offline model at
 `~/verde-water-rf-pilot-holdout-optimal02.json.gz`, backs up the Pi service,
-and adds a separate `water_quality_real_pilot` API field. The dashboard shows
-an additional **REAL-DATA RF PILOT** card, including any disagreement with the
-paper's threshold class. The official water classifier, synthetic prototype
+and adds a separate `water_quality_real_pilot` API field. The pilot is available
+through the API for comparison; its Dashboard card was removed. The official water classifier, synthetic prototype
 used for descriptive fusion, automation, SMS, GPIO, and calibration are not
 changed. The model remains unvalidated and does not control hardware.
 
@@ -339,6 +338,27 @@ The restart can briefly put actuators in SAFE/OFF. After startup, inspect
 `/api/status` for `water_quality_real_pilot`. Keep the backup path reported by
 the installer for rollback. The installer is guarded and does not restart the
 service itself.
+
+### Short water-temperature recovery
+
+`deploy/apply_pi_water_recovery_last_good.py` adds timestamped last-valid
+water-temperature metadata to the Pi's cached sensor snapshot. During a
+transient `RECOVERING` read, the Dashboard displays that value with a clear
+"not live" note. The prototype water RF may use it for at most 90 seconds and
+labels its result `EXPERIMENTAL_RECOVERING`. After 90 seconds, on a persistent
+`ERROR`, or without a prior valid reading, the prototype remains unavailable.
+The current sensor value stays null throughout recovery. Fusion reliability
+remains Low and the backend's safety override remains in force. Humidity,
+GPIO, calibration, SMS, and dosing behavior are unchanged.
+
+```bash
+cd ~/VERDEapp
+python3 deploy/apply_pi_water_recovery_last_good.py --check
+python3 deploy/apply_pi_water_recovery_last_good.py --apply
+sudo systemctl restart verde.service
+```
+
+The installer backs up each updated Pi file and does not restart the service.
 
 ## Development workflow across computers
 

@@ -43,6 +43,12 @@ test("experimental water result is clearly labeled while legacy status stays sep
   const display = normalizeBackendSnapshot(base);
   assert.equal(display.waterQuality.status, "Prototype: Suboptimal");
   assert.match(display.waterQuality.summary, /Prototype/);
+  const recovering = normalizeBackendSnapshot({ ...base,
+    water_quality_experimental: { status: "EXPERIMENTAL_RECOVERING", value: "Suboptimal",
+      detail: "Provisional: last valid water temperature; not a live measurement." }
+  });
+  assert.equal(recovering.waterQuality.status, "Prototype (recovering): Suboptimal");
+  assert.match(recovering.waterQuality.summary, /not a live measurement/);
   assert.equal(display.fusion.confidence, "Medium");
   const unavailable = normalizeBackendSnapshot({ ...base,
     water_quality_experimental: { status: "SENSOR INPUT UNAVAILABLE", value: null,
@@ -247,6 +253,38 @@ test("transient retries and different sample generations never expose old values
   assert.equal(incoherent.find((item) => item.label === "Water Temperature").value, "—");
   assert.equal(incoherent.find((item) => item.label === "Humidity").status, "Stale");
   assert.equal(incoherent.find((item) => item.label === "Humidity").value, "—");
+});
+
+test("recovering water temperature shows a recent last reading as non-live", () => {
+  const recent = new Date(Date.now() - 30_000).toISOString();
+  const expired = new Date(Date.now() - 120_000).toISOString();
+  const sensors = {
+    water_temperature: { value_C: null, status: "RECOVERING: CRC failure",
+      read_error: "CRC failure", last_valid_value_C: 24.625,
+      last_valid_measured_at: recent },
+    ambient_humidity: { value: null, status: "RECOVERING: incomplete buffer",
+      read_error: "incomplete buffer", last_valid_value: 70,
+      last_valid_measured_at: recent }
+  };
+  const readings = normalizeLiveSensorSnapshot({ sensors });
+  const water = readings.find((item) => item.label === "Water Temperature");
+  const humidity = readings.find((item) => item.label === "Humidity");
+  assert.equal(water.value, "24.625");
+  assert.equal(humidity.value, "—");
+  assert.equal(water.status, "Recovering");
+  assert.equal(humidity.status, "Recovering");
+  assert.match(water.detail, /not live/);
+  assert.equal(water.lastReadingAt, recent);
+  sensors.water_temperature.last_valid_measured_at = expired;
+  sensors.ambient_humidity.status = "ERROR: disconnected";
+  const degraded = normalizeLiveSensorSnapshot({ sensors });
+  assert.equal(degraded.find((item) => item.label === "Water Temperature").value, "—");
+  assert.equal(degraded.find((item) => item.label === "Humidity").status, "Faulty Sensors");
+  assert.equal(degraded.find((item) => item.label === "Humidity").value, "—");
+  sensors.water_temperature.last_valid_measured_at = recent;
+  sensors.water_temperature.stale = true;
+  assert.equal(normalizeLiveSensorSnapshot({ sensors })
+    .find((item) => item.label === "Water Temperature").value, "—");
 });
 
 test("a stale dashboard hides old numbers and records their previous state", () => {

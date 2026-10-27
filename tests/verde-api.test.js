@@ -42,13 +42,13 @@ test("experimental water result is clearly labeled while legacy status stays sep
     fusion: { status: "READY", value: "Medium", detail: "Prototype descriptive fusion." } };
   const display = normalizeBackendSnapshot(base);
   assert.equal(display.waterQuality.status, "Prototype: Suboptimal");
-  assert.match(display.waterQuality.summary, /Prototype/);
+  assert.equal(display.waterQuality.summary, "Random Forest Model");
   const recovering = normalizeBackendSnapshot({ ...base,
     water_quality_experimental: { status: "EXPERIMENTAL_RECOVERING", value: "Suboptimal",
       detail: "Provisional: last valid water temperature; not a live measurement." }
   });
   assert.equal(recovering.waterQuality.status, "Prototype (recovering): Suboptimal");
-  assert.match(recovering.waterQuality.summary, /not a live measurement/);
+  assert.equal(recovering.waterQuality.summary, "Random Forest Model");
   assert.equal(display.fusion.confidence, "Medium");
   const unavailable = normalizeBackendSnapshot({ ...base,
     water_quality_experimental: { status: "SENSOR INPUT UNAVAILABLE", value: null,

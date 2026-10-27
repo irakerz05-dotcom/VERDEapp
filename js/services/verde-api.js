@@ -457,7 +457,7 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
         ? `Prototype (recovering): ${resultValue(experimentalWater)}`
         : experimentalWater?.status === "EXPERIMENTAL"
           ? `Prototype: ${resultValue(experimentalWater)}` : resultValue(waterDisplay),
-      summary: waterDisplay?.detail || waterDisplay?.status || "No classifier detail is available."
+      summary: "Random Forest Model"
     },
     waterQualityPilot: realPilot ? {
       status: realPilot.status === "EXPERIMENTAL"

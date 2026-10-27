@@ -388,3 +388,30 @@ Signing in to ChatGPT/Codex with the same account does not replace GitHub as the
 - Critical, Faulty Sensor, and Faulty Vision states must remain backend-enforced safety overrides to Semi-Automation Mode.
 - API GET responses are network-only in the service worker; stale live readings are never installed as offline cache entries.
 - Do not add credentials, Wi-Fi passwords, GSM details, `.env` files, physical training datasets, logs, or databases to Git. The synthetic prototype artifact in VERDE-Software is documented and reproducible.
+# Pi alert and GSM update
+
+The alert update names the critical or faulty sensor, identifies a camera or
+plant-slot vision failure, and sends a separate Harvest-Ready SMS notice naming
+the fixed plant slot. Harvest-Ready remains a notification in the app and does
+not require acknowledgement. Pest detection remains a separate SMS event.
+Routine water-temperature and humidity range deviations stay dashboard
+warnings; a *faulty* sensor remains an SMS event. The GSM sender retries failed
+dispatches while an incident remains active, no more often than once per minute.
+The update does not alter GPIO, thresholds, recipient settings, or automation.
+
+On the Pi, after pulling this branch, run:
+
+```bash
+cd ~/VERDEapp
+python3 deploy/apply_pi_alerts.py --check
+python3 deploy/apply_pi_alerts.py --apply
+python3 -m py_compile ~/VERDE-Sensor-Integration/app/service.py \
+  ~/VERDE-Sensor-Integration/app/notifications/alert_policy.py \
+  ~/VERDE-Sensor-Integration/app/notifications/sms_text.py
+sudo systemctl restart verde.service
+```
+
+The installer backs up the touched backend files and never sends a test SMS.
+After restarting, inspect `journalctl -u verde.service` and the app's Alerts
+page during a real qualifying event. Do not deliberately induce a water or
+camera fault just to test alerts.

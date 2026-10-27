@@ -511,6 +511,20 @@ test("backend events are converted to safe alert presentation data", () => {
   assert.equal(alerts[4].title, "Vision acknowledged");
 });
 
+test("harvest detection is a notification, never a vision warning", () => {
+  const [notice] = normalizeBackendEvents([{
+    id: 12, timestamp: "2026-10-28T07:12:00+08:00",
+    category: "notification_opened",
+    message: "Plant 4 is now Harvest-Ready. Check its planting date and harvest schedule.",
+    payload: { issue_key: "vision:slot:4:harvest_ready", source: "vision",
+      severity: "notice", state: "NOTICE" }
+  }]);
+  assert.equal(notice.title, "Harvest notification");
+  assert.equal(notice.state, "NOTICE");
+  assert.equal(notice.tone, "info");
+  assert.match(notice.message, /Plant 4 is now Harvest-Ready/);
+});
+
 test("real adapter uses same-origin routes, session token, and backend mode names", async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {

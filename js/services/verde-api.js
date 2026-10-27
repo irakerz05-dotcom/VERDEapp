@@ -581,14 +581,19 @@ export function normalizeBackendEvents(rows) {
     const state = payload.state
       ?? (category === "problem_resolved" ? "RESOLVED"
         : category === "problem_acknowledged" ? "ACKNOWLEDGED"
-          : category === "problem_opened" ? "OPEN" : null);
+          : category === "problem_opened" ? "OPEN"
+            : category === "notification_opened" ? "NOTICE"
+              : category === "notification_ended" ? "NOTICE_ENDED" : null);
     const source = String(payload.source ?? category).replaceAll("_", " ");
     const danger = payload.severity === "critical" || /error|fault|critical/i.test(`${category} ${row.message ?? ""}`);
     const warning = payload.severity === "warning" || category === "warning" || /warning|pending|unavailable/i.test(String(row.message ?? ""));
     const resolved = state === "RESOLVED";
     const acknowledged = state === "ACKNOWLEDGED";
-    const tone = resolved ? "good" : danger ? "danger" : warning || acknowledged ? "warn" : "info";
-    const title = state
+    const notice = state === "NOTICE" || state === "NOTICE_ENDED";
+    const tone = notice ? "info" : resolved ? "good" : danger ? "danger" : warning || acknowledged ? "warn" : "info";
+    const title = notice
+      ? `${payload.issue_key?.includes("harvest_ready") ? "Harvest" : "Vision"} notification${state === "NOTICE_ENDED" ? " ended" : ""}`
+      : state
       ? `${source.replace(/\b\w/g, (letter) => letter.toUpperCase())} ${resolved ? "recovered" : acknowledged ? "acknowledged" : "problem"}`
       : category.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
     return {
@@ -598,7 +603,7 @@ export function normalizeBackendEvents(rows) {
       source,
       issueKey: payload.issue_key ?? null,
       tone,
-      icon: resolved ? "✓" : acknowledged ? "◎" : danger ? "!" : warning ? "△" : "◉",
+      icon: notice ? "◉" : resolved ? "✓" : acknowledged ? "◎" : danger ? "!" : warning ? "△" : "◉",
       title,
       message: row.message ?? "Backend event",
       createdAt: row.timestamp

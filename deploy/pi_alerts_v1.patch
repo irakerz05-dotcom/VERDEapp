@@ -1,0 +1,291 @@
+diff --git a/app/notifications/__init__.py b/app/notifications/__init__.py
+index 877ec77..0528e8e 100644
+--- a/app/notifications/__init__.py
++++ b/app/notifications/__init__.py
+@@ -117,13 +117,15 @@ class SIM800GSM(Notifier):
+     def should_notify(self, issue_key, issue):
+         if not self.enabled or not self.recipient:
+             return False
++        if re.fullmatch(r"vision:slot:(10|[1-9]):(harvest_ready|fault)", issue_key):
++            return True
+         if issue_key in self.NOTIFIABLE:
+             return True
+         if issue.get("severity") != "critical":
+             return False
+         return (issue_key == "water_quality:classification"
+                 or issue_key in {"vision:camera", "vision:plant_model", "vision:pest_model"}
+-                or (issue_key.startswith("sensor:") and issue_key.endswith(":status")))
++                or (issue_key.startswith("sensor:") and issue_key.endswith((":status", ":critical"))))
+ 
+     def send(self, message):
+         message = " ".join(str(message).split())
+diff --git a/app/notifications/alert_policy.py b/app/notifications/alert_policy.py
+new file mode 100644
+index 0000000..46cc7c5
+--- /dev/null
++++ b/app/notifications/alert_policy.py
+@@ -0,0 +1,76 @@
++"""Turn fresh sensor and fixed-slot evidence into farmer-facing incidents."""
++
++import math
++
++
++SENSOR_LABELS = {
++    "ph": ("pH", "value"),
++    "ec": ("EC", "value_mScm"),
++    "water_temperature": ("Water temperature", "value_C"),
++    "turbidity": ("Turbidity", "value_ntu"),
++}
++
++
++def enrich_issues(issues, live_snapshot=None, fusion_by_slot=None):
++    """Add specific critical and plant notices without trusting retained readings."""
++    issues = dict(issues)
++    sensors = live_snapshot.get("sensors") if isinstance(live_snapshot, dict) else None
++    if isinstance(sensors, dict):
++        for name, (label, value_field) in SENSOR_LABELS.items():
++            sensor = sensors.get(name)
++            if not isinstance(sensor, dict):
++                continue
++            value = sensor.get(value_field)
++            status = str(sensor.get("status") or "")
++            if (str(sensor.get("classification") or "").upper() != "CRITICAL"
++                    or sensor.get("valid") is False or sensor.get("retained") is True
++                    or sensor.get("stale") is True or sensor.get("spike") is True
++                    or status.startswith(("ERROR", "RECOVERING", "UNAVAILABLE"))
++                    or isinstance(value, bool) or not isinstance(value, (int, float))
++                    or not math.isfinite(value)):
++                continue
++            issues[f"sensor:{name}:critical"] = {
++                "source": "sensor", "severity": "critical",
++                "message": f"{label} is critical: {value:.4f} {sensor.get('unit') or ''}. Check the water.",
++                "sensor_value": value, "sensor_unit": sensor.get("unit") or "",
++            }
++        # The per-sensor event names the actual trigger; avoid a second generic SMS.
++        if any(key.startswith("sensor:") and key.endswith(":critical")
++               for key in issues):
++            issues.pop("water_quality:classification", None)
++
++    if isinstance(fusion_by_slot, list):
++        issues.pop("vision:harvest_ready", None)
++        global_vision_fault = any(key in issues for key in
++                                  ("vision:camera", "vision:plant_model"))
++        if (not global_vision_fault and len(fusion_by_slot) == 10
++                and all(isinstance(row, dict) and row.get("plant_condition") == "Faulty Vision"
++                        for row in fusion_by_slot)):
++            global_vision_fault = True
++            issues["vision:camera"] = {
++                "source": "vision", "severity": "critical",
++                "message": "Camera or plant analysis is unavailable. Check the camera image.",
++            }
++        for row in fusion_by_slot:
++            if not isinstance(row, dict):
++                continue
++            slot = row.get("slot")
++            if type(slot) is not int or not 1 <= slot <= 10:
++                continue
++            condition = row.get("plant_condition")
++            if condition == "Harvest-Ready" and row.get("status") == "READY":
++                issues[f"vision:slot:{slot}:harvest_ready"] = {
++                    "source": "vision", "severity": "notice",
++                    "message": f"Plant {slot} is now Harvest-Ready. Check its planting date and harvest schedule.",
++                }
++            elif condition == "Faulty Vision" and not global_vision_fault:
++                issues[f"vision:slot:{slot}:fault"] = {
++                    "source": "vision", "severity": "critical",
++                    "message": f"Plant {slot} could not be classified by the camera. Check the image and camera.",
++                }
++    elif "vision:harvest_ready" in issues:
++        issues["vision:harvest_ready"] = {
++            "source": "vision", "severity": "notice",
++            "message": "Harvest-Ready lettuce detected. Check the plant positions and planting dates.",
++        }
++    return issues
+diff --git a/app/notifications/sms_text.py b/app/notifications/sms_text.py
+index c2ff768..13ff4b4 100644
+--- a/app/notifications/sms_text.py
++++ b/app/notifications/sms_text.py
+@@ -1,5 +1,8 @@
+ """Short farmer-facing SMS text; incident records keep technical diagnostics."""
+ 
++import math
++import re
++
+ 
+ SENSOR_NAMES = {
+     "ph": "pH",
+@@ -10,23 +13,40 @@ SENSOR_NAMES = {
+ }
+ 
+ MESSAGES = {
+-    "sensor:turbidity:critical": "Water cloudiness is above the alert level. Please check the water.",
+-    "water_quality:classification": "Water quality needs attention. Please check the readings and nutrient solution.",
+-    "vision:harvest_ready": "Some lettuce may be ready to harvest. Please check the plants and planting dates.",
++    "sensor:turbidity:critical": "Turbidity is critical. Please check the water.",
++    "water_quality:classification": "Water quality is critical. Check the sensor readings and nutrient solution.",
++    "vision:harvest_ready": "Harvest-Ready lettuce detected. Check the plants and planting dates.",
+     "vision:pest": "Possible pests were found. Please inspect the lettuce.",
+     "vision:camera": "The camera is not working. Please check its connection.",
+-    "vision:plant_model": "Plant monitoring is unavailable. Please check the camera and app.",
+-    "vision:pest_model": "Pest monitoring is unavailable. Please check the camera and app.",
++    "vision:plant_model": "Camera plant analysis is unavailable. Please check the camera and app.",
++    "vision:pest_model": "Camera pest analysis is unavailable. Please check the camera and app.",
+ }
+ 
+ 
+ def format_sms_alert(issue_key, issue):
+     """Never send the incident's raw exception or hardware identifiers by SMS."""
+-    if issue_key.startswith("sensor:") and issue_key.endswith(":status"):
++    slot = re.fullmatch(r"vision:slot:(10|[1-9]):(harvest_ready|fault)", issue_key)
++    if slot:
++        number, kind = slot.groups()
++        message = (f"Plant {number} is now Harvest-Ready. Check the harvest schedule."
++                   if kind == "harvest_ready" else
++                   f"Plant {number} camera result is unavailable. Check the camera and image.")
++    elif issue_key.startswith("sensor:") and issue_key.endswith(":critical"):
++        name = issue_key.split(":", 2)[1]
++        sensor = SENSOR_NAMES.get(name)
++        value = issue.get("sensor_value")
++        unit = issue.get("sensor_unit")
++        measured = (f" ({value:.2f} {unit})" if isinstance(value, (int, float))
++                    and not isinstance(value, bool) and math.isfinite(value) and
++                    isinstance(unit, str) and len(unit) <= 8 else "")
++        message = (f"{sensor} is critical{measured}. Please check the water."
++                   if sensor else "A water sensor is critical. Check the VERDE app.")
++    elif issue_key.startswith("sensor:") and issue_key.endswith(":status"):
+         name = issue_key.split(":", 2)[1]
+         sensor = SENSOR_NAMES.get(name)
+         message = (f"{sensor} sensor is not working. Please check its connection."
+                    if sensor else "A sensor is not working. Please check the VERDE app.")
+     else:
+         message = MESSAGES.get(issue_key, "A system problem needs attention. Please check the VERDE app.")
+-    return "VERDE alert: " + message
++    prefix = "VERDE notice: " if slot and slot.group(2) == "harvest_ready" or issue_key == "vision:harvest_ready" else "VERDE alert: "
++    return prefix + message
+diff --git a/app/service.py b/app/service.py
+index 89d2a56..60d97bf 100644
+--- a/app/service.py
++++ b/app/service.py
+@@ -1,6 +1,7 @@
+ import copy
+ import logging
+ import threading
++import time
+ from datetime import datetime, timezone
+ from app.components import Result, guarded
+ from app.sensors import default_sensors, validate_reading
+@@ -13,6 +14,7 @@ from app.fusion import TableFusion, required_water_sensor_fault
+ from app.automation import DisabledActuators, evaluate, MODES, SEMI
+ from app.notifications import default_gsm
+ from app.notifications.sms_text import format_sms_alert
++from app.notifications.alert_policy import enrich_issues
+ from app.database import Database
+ from app.sensor_history import record_sensor_sample
+ 
+@@ -136,7 +138,8 @@ def merge_live_sensor_issues(issues, live):
+         if status.startswith("ERROR") or (sensor.get("valid") is False and persistent):
+             issues[key] = {
+                 "source": "sensor", "severity": "critical",
+-                "message": f"{SENSOR_LABELS[name]} fault: {status}",
++                "message": f"{SENSOR_LABELS[name]} is not working. Please check its connection.",
++                "diagnostic": status,
+             }
+     return issues
+ 
+@@ -163,6 +166,8 @@ class VerdeService:
+         self.last_humidity_timestamp = None
+         self.active_issues = {}
+         self.acknowledged_issues = {}
++        self.notification_delivered = set()
++        self.notification_retry_after = {}
+         self.db_call(self.database.initialize)
+         self.camera_capture = CameraCaptureManager(
+             self.camera,
+@@ -195,21 +200,28 @@ class VerdeService:
+         for key in sorted(opened):
+             issue = current_issues[key]
+             issue["opened_at"] = transition_time
+-            self.event("problem_opened", issue["message"], {
++            notice = issue["severity"] == "notice"
++            self.event("notification_opened" if notice else "problem_opened", issue["message"], {
+                 "issue_key": key, "source": issue["source"],
+-                "severity": issue["severity"], "state": "OPEN",
++                "severity": issue["severity"], "state": "NOTICE" if notice else "OPEN",
+                 "opened_at": transition_time,
++                "diagnostic": issue.get("diagnostic"),
+             })
+         for key in sorted(resolved):
+             issue = self.active_issues[key]
+-            self.event("problem_resolved", f"Resolved: {issue['message']}", {
++            notice = issue["severity"] == "notice"
++            self.event("notification_ended" if notice else "problem_resolved",
++                       f"Ended: {issue['message']}" if notice else f"Resolved: {issue['message']}", {
+                 "issue_key": key, "source": issue["source"],
+-                "severity": "resolved", "state": "RESOLVED",
++                "severity": "notice" if notice else "resolved",
++                "state": "NOTICE_ENDED" if notice else "RESOLVED",
+                 "opened_at": issue.get("opened_at"),
+                 "acknowledged_at": self.acknowledged_issues.get(key),
+                 "resolved_at": transition_time,
+             })
+             self.acknowledged_issues.pop(key, None)
++            self.notification_delivered.discard(key)
++            self.notification_retry_after.pop(key, None)
+         for key in set(current_issues) & set(self.active_issues):
+             current_issues[key]["opened_at"] = self.active_issues[key].get("opened_at")
+         self.active_issues = copy.deepcopy(current_issues)
+@@ -222,6 +234,8 @@ class VerdeService:
+             issue = self.active_issues.get(issue_key)
+             if issue is None:
+                 raise LookupError("The incident is no longer active")
++            if issue["severity"] == "notice":
++                raise ValueError("Notifications do not require acknowledgement")
+             if issue_key in self.acknowledged_issues:
+                 return self.incident(issue_key, issue)
+             acknowledged_at = now()
+@@ -247,7 +261,8 @@ class VerdeService:
+             "source": issue["source"],
+             "severity": issue["severity"],
+             "message": issue["message"],
+-            "state": "ACKNOWLEDGED" if acknowledged_at else "OPEN",
++            "state": "NOTICE" if issue["severity"] == "notice" else
++                     "ACKNOWLEDGED" if acknowledged_at else "OPEN",
+             "opened_at": issue.get("opened_at"),
+             "acknowledged_at": acknowledged_at,
+         }
+@@ -321,18 +336,31 @@ class VerdeService:
+             if camera["status"] == "FAULT / ERROR":
+                 issues["vision:camera"] = {
+                     "source": "vision", "severity": "critical",
+-                    "message": f"Camera fault: {camera.get('detail') or 'image capture unavailable'}",
++                    "message": "Camera is not working. Please check its connection and image.",
++                    "diagnostic": camera.get("detail"),
+                 }
+             if live_snapshot is not None:
+                 issues = merge_live_sensor_issues(issues, live_snapshot)
+-            opened, _ = self.record_issue_transitions(issues)
+-            for issue_key in sorted(opened):
++            issues = enrich_issues(issues, live_snapshot, locals().get("fusion_by_slot"))
++            self.record_issue_transitions(issues)
++            for issue_key in sorted(issues):
+                 issue = issues[issue_key]
++                if issue_key in self.notification_delivered:
++                    continue
++                if time.monotonic() < self.notification_retry_after.get(issue_key, 0):
++                    continue
+                 if not self.gsm.should_notify(issue_key, issue):
+                     continue
+                 result = guarded(lambda issue_key=issue_key, issue=issue: self.gsm.send(
+                     format_sms_alert(issue_key, issue)))
+-                self.event("notification", result.status, result.as_dict())
++                self.event("notification", result.status, {
++                    "issue_key": issue_key, "result": result.as_dict(),
++                })
++                if result.status in ("SENT", "NOT SENT — COOLDOWN"):
++                    self.notification_delivered.add(issue_key)
++                    self.notification_retry_after.pop(issue_key, None)
++                else:
++                    self.notification_retry_after[issue_key] = time.monotonic() + 60
+             sensors = {name: value.as_dict() for name, value in readings.items()}
+             sensors["ambient_humidity"]["last_reading_timestamp"] = self.last_humidity_timestamp
+             self.state = {

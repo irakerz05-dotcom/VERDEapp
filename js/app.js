@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=50";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=50";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=51";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=51";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -440,9 +440,9 @@ function renderAlerts(data, alerts) {
     state: incident.state,
     source: incident.source,
     issueKey: incident.issueKey,
-    tone: incident.severity === "critical" ? "danger" : "warn",
-    icon: incident.state === "ACKNOWLEDGED" ? "◎" : incident.severity === "critical" ? "!" : "△",
-    title: `${incident.source.replace(/\b\w/g, (letter) => letter.toUpperCase())} ${incident.state === "ACKNOWLEDGED" ? "acknowledged" : "problem"}`,
+    tone: incident.severity === "notice" ? "info" : incident.severity === "critical" ? "danger" : "warn",
+    icon: incident.severity === "notice" ? "◉" : incident.state === "ACKNOWLEDGED" ? "◎" : incident.severity === "critical" ? "!" : "△",
+    title: incident.severity === "notice" ? "Harvest notification" : `${incident.source.replace(/\b\w/g, (letter) => letter.toUpperCase())} ${incident.state === "ACKNOWLEDGED" ? "acknowledged" : "problem"}`,
     message: incident.message,
     createdAt: incident.acknowledgedAt || incident.openedAt || data.updatedAt
   }));
@@ -459,7 +459,7 @@ function renderAlerts(data, alerts) {
     || (alertFilter === "System" && !alert.state));
   const items = filtered.map((alert) => {
     const tone = ["good", "warn", "danger"].includes(alert.tone) ? alert.tone : "info";
-    const label = tone === "danger" ? "Critical" : tone === "warn" ? "Warning" : tone === "good" ? "Resolved" : "System";
+    const label = alert.state === "NOTICE" || alert.state === "NOTICE_ENDED" ? "Notification" : tone === "danger" ? "Critical" : tone === "warn" ? "Warning" : tone === "good" ? "Resolved" : "System";
     const active = alert.issueKey ? activeIncidents.get(alert.issueKey) : null;
     const canAcknowledge = alert.state === "OPEN" && active?.state === "OPEN";
     return `<article class="alert-item ${tone}"><span class="alert-symbol" aria-hidden="true">${safe(alert.icon)}</span><div class="alert-copy"><div class="alert-title-row"><h2>${safe(alert.title)}</h2><span class="severity ${tone}">${label}</span></div><p>${safe(alert.message)}</p><div class="alert-meta"><time datetime="${safe(alert.createdAt)}">${safe(relativeAlertTime(alert.createdAt))}</time><span aria-hidden="true">•</span><time datetime="${safe(alert.createdAt)}">${safe(niceTime(alert.createdAt))}</time></div>${canAcknowledge ? `<button type="button" class="acknowledge-button" data-acknowledge-issue="${safe(alert.issueKey)}">Acknowledge</button>` : ""}</div></article>`;
@@ -628,7 +628,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=50", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=51", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

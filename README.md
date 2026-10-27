@@ -171,10 +171,12 @@ should appear after the next sensor acquisition (normally about 30 seconds).
 
 ## NFT planting records
 
-The Plants page has 12 fixed positions: top NFT row Plant 1–6 from right to
-left, bottom NFT row Plant 7–12 from right to left. Select a position on the
+The Plants page has 10 fixed positions: top NFT row Plant 1–5 from right to
+left, bottom NFT row Plant 6–10 from right to left. Select a position on the
 camera image or in the slot grid to enter a planting date. The Pi stores dates
-in its existing SQLite database and calculates the days growing. Swap moves
+in its existing SQLite database and calculates the days growing. The 10-slot
+layout starts with blank dates in a new table; earlier 12-slot records remain
+in the original table. Swap moves
 two saved dates when plants are physically moved; erase clears a date for a
 replacement plant. Camera detection boxes do not establish plant identity,
 and planting age does not automatically change the experimental AI result.
@@ -186,6 +188,14 @@ The installer backs up the existing backend web module. Restart
 `verde.service` at a safe time because its restart can briefly set actuators
 SAFE/OFF and may reopen SMS incidents. Afterward, check
 `http://127.0.0.1:8000/api/plant-slots` on the Pi.
+
+For the 10-slot layout on an already updated Pi, run
+`python3 deploy/apply_pi_ten_plant_slots.py --check` and then `--apply`.
+Run `python3 deploy/apply_pi_ten_fusion.py --check` and then `--apply` to
+expose one descriptive Table 3 confidence result per fixed position using
+the Water Quality prototype and fresh YOLO detections. Both installers make
+backups and leave the service running until a safe restart. The new date
+table is blank; the original 12-slot date table is retained in SQLite.
 
 ## Experimental water-quality Random Forest
 

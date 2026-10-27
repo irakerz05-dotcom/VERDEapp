@@ -308,6 +308,9 @@ export function markSnapshotStale(snapshot, reason) {
     online: false,
     stale: true,
     staleReason: reason,
+    fusionBySlot: snapshot.fusionBySlot?.map((slot) => ({
+      ...slot, confidence: null, status: "Stale", reason: "No current sensor or vision result."
+    })) ?? null,
     sensors: (snapshot.sensors ?? []).map((sensor) => ({
       ...sensor,
       value: "—",
@@ -320,13 +323,14 @@ export function markSnapshotStale(snapshot, reason) {
 
 export function normalizePlantSlots(payload) {
   const entries = new Map((Array.isArray(payload?.slots) ? payload.slots : [])
-    .filter((item) => Number.isInteger(item?.slot) && item.slot >= 1 && item.slot <= 12)
+    .filter((item) => Number.isInteger(item?.slot) && item.slot >= 1 && item.slot <= 10)
     .map((item) => [item.slot, item]));
   return {
-    supported: payload?.supported !== false && Array.isArray(payload?.slots),
+    supported: payload?.supported !== false && payload?.slot_count === 10
+      && Array.isArray(payload?.slots) && payload.slots.length === 10,
     asOf: typeof payload?.as_of === "string" ? payload.as_of : null,
     error: payload?.error ?? null,
-    slots: Array.from({ length: 12 }, (_, index) => {
+    slots: Array.from({ length: 10 }, (_, index) => {
       const source = entries.get(index + 1) ?? {};
       return {
         slot: index + 1,
@@ -336,6 +340,27 @@ export function normalizePlantSlots(payload) {
       };
     })
   };
+}
+
+export function normalizeFusionBySlot(rows) {
+  if (!Array.isArray(rows) || rows.length !== 10) return null;
+  const allowedConfidence = new Set(["High", "Medium", "Low", null]);
+  const allowedConditions = new Set(["Healthy", "Yellowing", "Wilting", "Harvest-Ready", "Faulty Vision", null]);
+  const bySlot = new Map();
+  for (const row of rows) {
+    if (!Number.isInteger(row?.slot) || row.slot < 1 || row.slot > 10
+        || bySlot.has(row.slot) || !allowedConfidence.has(row.confidence ?? null)
+        || !allowedConditions.has(row.plant_condition ?? null)) return null;
+    bySlot.set(row.slot, {
+      slot: row.slot,
+      plantCondition: row.plant_condition ?? null,
+      sensorStatus: row.sensor_status ?? null,
+      confidence: row.confidence ?? null,
+      status: row.status ?? "UNAVAILABLE",
+      reason: row.reason ?? "No fusion result."
+    });
+  }
+  return Array.from({ length: 10 }, (_, index) => bySlot.get(index + 1));
 }
 
 function hasSensorOutput(sensor) {
@@ -449,6 +474,7 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
       confidence: resultValue(fusion),
       reason: fusion.detail || fusion.status || "Fusion output is unavailable."
     },
+    fusionBySlot: normalizeFusionBySlot(state.fusion_by_slot),
     alerts: Array.isArray(state.alerts) ? state.alerts : [],
     incidents: (Array.isArray(state.incidents) ? state.incidents : []).map((incident) => ({
       issueKey: incident.issue_key ?? null,
@@ -752,7 +778,7 @@ export class MockVerdeApi {
     this.mode = "Full Automation";
     this.smsSettings = { sms_enabled: false, recipient_configured: false,
       recipient_masked: null, modem_configured: false, supported: true };
-    this.plantSlotDates = Array(12).fill(null);
+    this.plantSlotDates = Array(10).fill(null);
   }
 
   async respond(value) {
@@ -836,6 +862,7 @@ export class MockVerdeApi {
   async getPlantSlots() {
     return this.respond(normalizePlantSlots({
       as_of: new Date().toISOString().slice(0, 10),
+      slot_count: 10,
       slots: this.plantSlotDates.map((planted_on, index) => ({
         slot: index + 1, planted_on,
         days_growing: planted_on ? Math.floor((Date.now() - Date.parse(`${planted_on}T00:00:00`)) / 86_400_000) : null
@@ -845,7 +872,7 @@ export class MockVerdeApi {
 
   async updatePlantSlots(change) {
     const slot = change?.slot;
-    const valid = (value) => Number.isInteger(value) && value >= 1 && value <= 12;
+    const valid = (value) => Number.isInteger(value) && value >= 1 && value <= 10;
     if (change?.operation === "set" && valid(slot)) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(change.planted_on ?? "")
           || Number.isNaN(Date.parse(`${change.planted_on}T00:00:00`))

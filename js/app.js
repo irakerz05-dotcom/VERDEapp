@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=45";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=45";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=46";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=46";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -265,9 +265,6 @@ function bindSmsSettingsButton(settings, data) {
 
 function renderDashboard(data) {
   const time = niceTime(data.updatedAt);
-  const fusionHeading = /^(High|Medium|Low)$/i.test(data.fusion.confidence)
-    ? `${data.fusion.confidence} confidence`
-    : data.fusion.confidence;
   const content = `<section class="overview" aria-label="System overview">
       <div><span class="meta">LAST SAMPLE</span><strong>${safe(time)}</strong></div>
       <button data-mode-button class="mode" type="button"><span aria-hidden="true">⚙</span><div><span class="meta">ACTIVE MODE</span><strong>${safe(data.mode)}</strong><small>Requested: ${safe(data.requestedMode || data.mode)}</small></div></button>
@@ -277,9 +274,6 @@ function renderDashboard(data) {
     <section class="sensor-grid" aria-label="Sensor readings">${data.sensors.map(renderCard).join("")}</section>
     <section class="insight-list" aria-label="System insights">
       <article class="insight water"><span class="big-icon" aria-hidden="true">◈</span><div><p class="eyebrow">WATER QUALITY</p><h2>${safe(data.waterQuality.status)}</h2><p>${safe(data.waterQuality.summary)}</p></div></article>
-      ${data.waterQualityPilot ? `<article class="insight water"><span class="big-icon" aria-hidden="true">◇</span><div><p class="eyebrow">REAL-DATA RF PILOT</p><h2>${safe(data.waterQualityPilot.status)}</h2><p>${safe(data.waterQualityPilot.summary)}</p></div></article>` : ""}
-      <article class="insight"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT MONITORING</p><h2>${safe(data.plant.condition)}</h2><p>${safe(data.plant.simulatedPest?.status || data.plant.pestStatus)} · Vision ${safe(data.plant.status)}</p></div></article>
-      <article class="insight"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>${safe(fusionHeading)}</h2><p>${safe(data.fusion.reason)}</p></div></article>
     </section>`;
   app.innerHTML = renderShell(content, data);
   bindModeButton(data);
@@ -631,7 +625,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=45", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=46", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

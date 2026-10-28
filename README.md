@@ -422,3 +422,10 @@ For an existing alert v1 installation, also run
 the earlier v2 alert grouping: temporarily unclassified plant slots remain
 visible in per-slot fusion and do not trigger a Faulty Vision SMS. Actual
 camera capture or plant-analysis failures still qualify for SMS.
+
+If the modem echoes an SMS but replies later, install the SIM800 confirmation
+reader with `python3 deploy/apply_pi_sms_confirmation.py --check` followed by
+`python3 deploy/apply_pi_sms_confirmation.py --apply` and restart the service.
+The sender waits for a final `+CMGS` and `OK` response. If confirmation never
+arrives, it records `UNCONFIRMED` rather than claiming delivery or retrying an
+SMS that might already have been accepted.

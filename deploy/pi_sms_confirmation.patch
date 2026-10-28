@@ -1,0 +1,59 @@
+diff --git a/app/notifications/__init__.py b/app/notifications/__init__.py
+index 5075df0..44c0e8b 100644
+--- a/app/notifications/__init__.py
++++ b/app/notifications/__init__.py
+@@ -28,6 +28,10 @@ class UnavailableGSM(Notifier):
+         return issue_key == "sensor:turbidity:critical"
+ 
+ 
++class SMSConfirmationUnknown(RuntimeError):
++    """The message was submitted, but the modem gave no final result."""
++
++
+ class SIM800GSM(Notifier):
+     """Small SIM800 SMS adapter with no background or inbound-message access."""
+ 
+@@ -82,6 +86,25 @@ class SIM800GSM(Notifier):
+             raise RuntimeError(f"SIM800 rejected {command}: {response.strip() or 'no response'}")
+         return response
+ 
++    def _sms_confirmation(self, modem, timeout_seconds=60):
++        """Read through echoed text until the modem confirms or rejects SMS."""
++        deadline = time.monotonic() + timeout_seconds
++        parts = []
++        while True:
++            chunk = modem.read_all().decode("utf-8", errors="replace")
++            if chunk:
++                parts.append(chunk)
++            response = "".join(parts)
++            if re.search(r"\+CMGS:\s*\d+", response) and re.search(r"(?:^|\r|\n)OK(?:\r|\n|$)", response):
++                return response
++            error = re.search(r"\+CMS ERROR:\s*\d+|(?:^|\r|\n)ERROR(?:\r|\n|$)", response)
++            if error:
++                raise RuntimeError(f"SIM800 rejected SMS: {error.group(0).strip()}")
++            if time.monotonic() >= deadline:
++                raise SMSConfirmationUnknown(
++                    "SMS confirmation did not arrive within 60 seconds; delivery is unknown")
++            self._sleep(0.25)
++
+     @staticmethod
+     def _match(pattern, response, default=None):
+         match = re.search(pattern, response)
+@@ -158,13 +181,14 @@ class SIM800GSM(Notifier):
+                         if ">" not in prompt:
+                             raise RuntimeError(f"SIM800 did not present SMS prompt: {prompt.strip() or 'no response'}")
+                         modem.write(message.encode("ascii", errors="replace") + b"\x1a")
+-                        response = self._read(modem, 2)
+-                        if "+CMGS:" not in response or "OK" not in response:
+-                            raise RuntimeError(f"SIM800 did not confirm SMS: {response.strip() or 'no response'}")
++                        response = self._sms_confirmation(modem)
+                     self._last_message = message
+                     self._last_sent_at = current
+                     reference = self._match(r"\+CMGS:\s*(\d+)", response)
+                     return Result("SENT", detail=f"SMS accepted by modem (reference {reference or 'unknown'})")
++                except SMSConfirmationUnknown as exc:
++                    # Retrying after Ctrl-Z could send a duplicate SMS.
++                    return Result("UNCONFIRMED", detail=str(exc))
+                 except Exception as exc:
+                     last_error = exc
+                     if attempt <= self.retries:

@@ -1,6 +1,8 @@
 {
   "recorded_on": "2026-10-29",
   "units": "mL/s",
+  "operating_reservoir_volume_L": 20,
+  "prior_tap_water_test_volume_L": 2,
   "pump1": {
     "role": "nutrient_dosing",
     "gpio_bcm": 27,
@@ -19,5 +21,5 @@
     "estimated_flow_mL_per_s": 0.82,
     "basis": "Assumed equal to Pump 1 at user direction; not separately measured"
   },
-  "control_use": "Planning estimates only. Dose-response and short-pulse delivery are unverified; this record does not enable automatic actuation."
+  "control_use": "The user reported three 1.22 s deliveries at 1 mL, but did not specify whether these were three Pump 1 trials or one trial for each pump. The 2 L sequential chemical test is not a dose-response calibration for the 20 L operating reservoir. This record does not enable automatic actuation."
 }

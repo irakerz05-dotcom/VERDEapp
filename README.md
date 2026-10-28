@@ -592,7 +592,7 @@ minute between completed doses, and rolling 24-hour limits of 10 mL nutrients,
 5.86 mL pH Up, and 4.1 mL pH Down at the assumed 0.82 mL/s flow. An
 interrupted dose remains blocked pending manual inspection. Arming requires
 the circulation pump reconnected and actual flow observed; the web service
-still uses `DisabledActuators` until a separate backend integration is applied.
+uses the installed pump runtime while the gateway remains disarmed.
 
 `deploy/apply_pi_pump_runtime.py` installs that separate service integration
 after the protected gateway is installed. It backs up the Pi service, copies
@@ -605,9 +605,17 @@ circulation at GPIO24 HIGH in both modes. A Faulty Sensor, Faulty Vision,
 stale acquisition, or system fault requires GPIO24 LOW/STOP; a Critical
 reading alone selects Semi-Automation and holds automatic dosing while
 circulation keeps mixing. Temporary unclassified vision holds dosing without
-stopping circulation. Semi-Automation dose confirmation remains blocked until
-its separate confirmation endpoint is integrated and tested.
+stopping circulation.
 
 `deploy/apply_pi_circulation_policy.py` updates those three policy modules in
 one guarded transaction. It accepts only the reviewed installed module hashes
 and backs up each file before editing. The gateway remains disarmed.
+
+`deploy/apply_pi_pump_confirmation.py` adds a guarded `/api/confirm` action
+for one farmer-confirmed dose in Semi-Automation. It rechecks a fresh integrated
+sensor snapshot, correction eligibility, circulation state, the one-minute
+mixing wait, and the root-owned volume ledger immediately before requesting
+the existing pump controller. The dashboard shows a confirmation button only
+when the backend reports an eligible recommendation. The protected gateway
+still rejects every dose while disarmed. The installer backs up each changed
+Pi file and never arms the gateway or switches a pump.

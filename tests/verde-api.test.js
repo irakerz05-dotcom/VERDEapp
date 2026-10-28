@@ -547,6 +547,20 @@ test("real adapter uses same-origin routes, session token, and backend mode name
   assert.deepEqual(JSON.parse(calls[6].options.body), { issue_key: "vision:pest" });
 });
 
+test("farmer dose confirmation uses the protected backend route and reports a blocked result", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/api/session")) return { ok: true, status: 200, json: async () => ({ token: "test-token" }) };
+    return { ok: false, status: 409, json: async () => ({ status: "BLOCKED — PUMP GATEWAY DISARMED OR BUSY" }) };
+  };
+  const api = new VerdeApi({ fetchImpl });
+  await assert.rejects(api.confirmDose(), /DISARMED/);
+  assert.equal(calls[1].url, "/api/confirm");
+  assert.equal(calls[1].options.headers["X-VERDE-Token"], "test-token");
+  assert.deepEqual(JSON.parse(calls[1].options.body), {});
+});
+
 test("real adapter keeps status and camera data when optional sensor routes are unavailable", async () => {
   const calls = [];
   const fetchImpl = async (url) => {

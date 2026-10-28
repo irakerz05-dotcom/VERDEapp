@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=54";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=54";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=55";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=55";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -148,7 +148,7 @@ async function requestModeChange(data, sourceButton) {
     title: `Switch to ${nextMode}?`,
     text: data.isMock
       ? "This changes mock state only. It does not contact or control hardware."
-      : "The Raspberry Pi backend will validate the request and keep its safety override active when required. Physical outputs remain disabled in this prototype.",
+      : "The Raspberry Pi will check live sensors and safety rules before changing mode. If Full Automation becomes active, it can control the connected pumps.",
     confirmText: "Request change",
     onConfirm: async () => {
       if (sourceButton) sourceButton.disabled = true;
@@ -168,6 +168,35 @@ async function requestModeChange(data, sourceButton) {
 function bindModeButton(data) {
   const button = document.querySelector("[data-mode-button]");
   button?.addEventListener("click", () => requestModeChange(data, button));
+}
+
+function bindDoseConfirmation(data) {
+  const button = document.querySelector("[data-confirm-dose]");
+  if (!button) return;
+  button.addEventListener("click", () => {
+    if (data.stale || !data.online) {
+      showToast("Wait for fresh live readings before confirming a dose.", "warn");
+      return;
+    }
+    showModal({
+      title: "Confirm one dose?",
+      text: "The Pi will recheck the sensors and pump limits, then run one eligible dosing pump for up to 5 seconds (about 4.1 mL). Allow at least 1 minute of mixing before another dose.",
+      confirmText: "Confirm dose",
+      onConfirm: async () => {
+        button.disabled = true;
+        try {
+          const result = await withTimeout(api.confirmDose(), 45_000);
+          showToast(result.detail || "One dose completed.");
+          await render();
+        } catch (error) {
+          showToast(error?.message || "The dose was blocked.", "danger");
+          await render();
+        } finally {
+          if (button.isConnected) button.disabled = false;
+        }
+      }
+    });
+  });
 }
 
 function isInstalledPwa() {
@@ -270,6 +299,7 @@ function renderDashboard(data) {
       <button data-mode-button class="mode" type="button"><span aria-hidden="true">⚙</span><div><span class="meta">ACTIVE MODE</span><strong>${safe(data.mode)}</strong><small>Requested: ${safe(data.requestedMode || data.mode)}</small></div></button>
     </section>
     ${data.modeOverride ? `<aside class="safety-note" role="status"><b>Safety override active</b><span>${safe(data.modeOverride)}</span></aside>` : ""}
+    ${data.pumpAutomation?.confirmationAvailable && !data.stale && data.online ? `<aside class="safety-note dose-confirmation"><div><b>Farmer confirmation required</b><span>${safe(data.pumpAutomation.recommendations.filter((item) => ["pH-Up dosing", "pH-Down dosing", "EC nutrient dosing"].includes(item)).join(", "))}</span></div><button data-confirm-dose type="button" class="primary">Confirm one dose</button></aside>` : ""}
     <section class="section-heading"><div><h2>Live readings</h2><p>${safe(sourceLabel(data))}</p></div><time datetime="${safe(data.updatedAt)}">Updated ${safe(time)}</time></section>
     <section class="sensor-grid" aria-label="Sensor readings">${data.sensors.map(renderCard).join("")}</section>
     <section class="insight-list" aria-label="System insights">
@@ -277,6 +307,7 @@ function renderDashboard(data) {
     </section>`;
   app.innerHTML = renderShell(content, data);
   bindModeButton(data);
+  bindDoseConfirmation(data);
   bindNav();
 }
 
@@ -626,7 +657,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=54", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=55", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

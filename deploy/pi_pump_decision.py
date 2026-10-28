@@ -67,7 +67,8 @@ def _sensor_fault(sensor):
 def decide(*, selected_mode, override_latched, request_full, sensors,
            snapshot_age_seconds, water_class, camera_fault, vision_fault,
            last_dose_elapsed_seconds, calibrated_dose_seconds,
-           circulation_flow_gpio_level, dosed_ml_by_pump=None):
+           circulation_flow_gpio_level, dosed_ml_by_pump=None,
+           farmer_confirmed=False):
     """Return a proposed action; no state or hardware is changed.
 
     ``request_full`` represents a fresh farmer action after an override. Merely
@@ -130,8 +131,15 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
     pump = None
     seconds = None
     dose_ml = None
-    if (active_mode == FULL and reason is None and water_class in ("Optimal", "Suboptimal")
-            and not camera_fault and not vision_fault):
+    automatic = (active_mode == FULL and reason is None
+                 and water_class in ("Optimal", "Suboptimal"))
+    confirmed = (farmer_confirmed and active_mode == SEMI and not stale
+                 and not faulty and not unready and not camera_fault and not vision_fault
+                 and water_class in ("Optimal", "Suboptimal", "Critical")
+                 and (water_class != "Critical"
+                      or any(item in ("ph", "ec") for item in critical))
+                 and all(item in ("ph", "ec", "water quality") for item in critical))
+    if automatic or confirmed:
         ph = sensors["ph"]["value"]
         ec = sensors["ec"]["value_mScm"]
         if ph < 5.5:

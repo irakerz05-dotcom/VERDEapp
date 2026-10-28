@@ -20,8 +20,8 @@ def load_runtime():
     automation.SEMI = pi_pump_decision.SEMI
     automation.OUTPUTS = ("ph_up", "ph_down", "nutrient_dosing", "circulation_pump")
     components = types.ModuleType("app.components")
-    components.Result = lambda status, detail=None: types.SimpleNamespace(
-        status=status, detail=detail)
+    components.Result = lambda status, value=None, detail=None: types.SimpleNamespace(
+        status=status, value=value, detail=detail)
     modules = {"app": app, "app.automation": automation,
                "app.automation.pump_decision": pi_pump_decision,
                "app.components": components}
@@ -111,6 +111,39 @@ class RuntimeTests(unittest.TestCase):
         automation["circulation_stop_required"] = True
         runtime.apply(automation, snapshot, water, plant, camera)
         self.assertEqual(calls, [("status",), ("safe-off",)])
+
+    def test_farmer_confirmation_allows_one_critical_ph_dose(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        gateway = {"armed": True, "circulation": "RUN", "in_progress": False,
+                   "last_dose_elapsed_seconds": None,
+                   "ml_in_last_24h": {"pump1": 0, "pump2": 0, "pump3": 0}}
+        runtime.command = lambda *args: calls.append(args) or gateway
+        automation, snapshot, water, plant, camera = inputs()
+        snapshot["sensors"]["ph"]["value"] = 8.5
+        automation["active_mode"] = pi_pump_decision.SEMI
+        automation["selected_mode"] = pi_pump_decision.SEMI
+        automation["override"] = True
+        automation["confirmation_available"] = True
+        state = {"automation": automation,
+                 "water_quality_experimental": {"value": "Critical"},
+                 "plant_condition": {"status": "READY", "value": "Healthy"},
+                 "camera": camera}
+        result = runtime.confirm(state, snapshot)
+        self.assertEqual(result.status, "DOSED")
+        self.assertEqual(calls, [("status",), ("dose", "pump3", "5.00000000")])
+
+    def test_fault_blocks_farmer_confirmation_before_gateway_call(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        runtime.command = lambda *args: calls.append(args) or {}
+        automation, snapshot, water, plant, camera = inputs()
+        automation["active_mode"] = pi_pump_decision.SEMI
+        automation["circulation_stop_required"] = True
+        state = {"automation": automation}
+        result = runtime.confirm(state, snapshot)
+        self.assertIn("BLOCKED", result.status)
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":

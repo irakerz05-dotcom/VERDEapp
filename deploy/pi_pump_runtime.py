@@ -20,6 +20,14 @@ from app.components import Result
 GATEWAY = "/usr/local/libexec/verde_auto_pumps.py"
 COMMAND = ("/usr/bin/sudo", "-n", GATEWAY)
 DOSE_SECONDS = {"pump1": 5.0, "pump2": 5.0, "pump3": 5.0}
+CORRECTIVE_RECOMMENDATIONS = ("pH-Up dosing", "pH-Down dosing", "EC nutrient dosing")
+
+
+def confirmation_available(automation):
+    return (automation.get("active_mode") == SEMI and not automation.get("hold_reason")
+            and not automation.get("circulation_stop_required", True)
+            and any(item in CORRECTIVE_RECOMMENDATIONS
+                    for item in automation.get("recommendations", [])))
 
 
 def snapshot_age_seconds(snapshot):
@@ -63,6 +71,52 @@ class PumpRuntime:
     def request(self, action):
         return Result("BLOCKED — CONFIRMATION NOT YET INTEGRATED", detail=action)
 
+    def confirm(self, state, live_snapshot):
+        """Run one farmer-confirmed Semi dose after a fresh service tick."""
+        automation = state.get("automation", {}) if isinstance(state, dict) else {}
+        if automation.get("active_mode") != SEMI:
+            return Result("BLOCKED — SEMI MODE REQUIRED")
+        if automation.get("confirmation_available") is not True:
+            return Result("BLOCKED — NO CONFIRMABLE RECOMMENDATION")
+        if automation.get("hold_reason") or automation.get("circulation_stop_required", True):
+            return Result("BLOCKED — SENSOR OR VISION HOLD",
+                          detail=automation.get("hold_reason") or automation.get("override_reason") or "")
+        if snapshot_age_seconds(live_snapshot) > 65:
+            return Result("BLOCKED — STALE SENSOR SAMPLE")
+        try:
+            gateway = self.command("status")
+            if gateway.get("armed") is not True or gateway.get("in_progress"):
+                return Result("BLOCKED — PUMP GATEWAY DISARMED OR BUSY")
+            sensors = live_snapshot.get("sensors", {}) if isinstance(live_snapshot, dict) else {}
+            water = state.get("water_quality_experimental", {})
+            plant = state.get("plant_condition", {})
+            camera = state.get("camera", {})
+            if not all(isinstance(item, dict) for item in (water, plant, camera)):
+                return Result("BLOCKED — INCOMPLETE MONITORING STATE")
+            proposal = decide(
+                selected_mode=SEMI, override_latched=False, request_full=False,
+                sensors=sensors, snapshot_age_seconds=snapshot_age_seconds(live_snapshot),
+                water_class=water.get("value"),
+                camera_fault=camera.get("status") == "FAULT / ERROR",
+                vision_fault=plant.get("status") == "FAULT / ERROR",
+                last_dose_elapsed_seconds=gateway.get("last_dose_elapsed_seconds"),
+                calibrated_dose_seconds=DOSE_SECONDS,
+                circulation_flow_gpio_level="HIGH",
+                dosed_ml_by_pump=gateway.get("ml_in_last_24h"),
+                farmer_confirmed=True,
+            )
+            if proposal.pump is None:
+                return Result("BLOCKED — NO ELIGIBLE DOSE",
+                              detail=proposal.reason or "Target, mixing wait, or volume limit")
+            if gateway.get("circulation") != "RUN":
+                self.command("circulation", "run")
+            result = self.command("dose", proposal.pump, f"{proposal.dose_seconds:.8f}")
+            return Result("DOSED", value=result,
+                          detail=f"Farmer confirmed {proposal.dose_action}")
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+            stopped = self.all_off(str(exc))
+            return Result("FAULT / ERROR", detail=f"Pump command failed: {exc}; {stopped.status}")
+
     def apply(self, automation, live_snapshot, water, plant, camera):
         """Apply one cycle after database writes succeeded; return display state."""
         output = copy.deepcopy(automation)
@@ -76,12 +130,14 @@ class PumpRuntime:
                 output["override"] = True
                 output["override_reason"] = "Pump controller is disarmed"
                 output["actuation_enabled"] = False
+                output["confirmation_available"] = False
                 output["hardware_status"] = "DISARMED — CIRCULATION CONFIGURATION PENDING"
                 output["outputs"] = {name: "OFF / DISARMED" for name in OUTPUTS}
                 return output
             if automation.get("circulation_stop_required", True):
                 self.command("safe-off")
                 output["actuation_enabled"] = False
+                output["confirmation_available"] = False
                 output["hardware_status"] = "FAULT OVERRIDE — PUMPS STOPPED"
                 output["outputs"] = {name: "OFF" for name in OUTPUTS}
                 return output
@@ -89,6 +145,7 @@ class PumpRuntime:
                 if gateway.get("circulation") != "RUN":
                     self.command("circulation", "run")
                 output["actuation_enabled"] = False
+                output["confirmation_available"] = confirmation_available(output)
                 output["hardware_status"] = "CRITICAL — SEMI-AUTOMATION; DOSING HELD"
                 output["outputs"] = {name: "OFF" for name in OUTPUTS}
                 output["outputs"]["circulation_pump"] = "RUN (GPIO24 HIGH)"
@@ -111,6 +168,7 @@ class PumpRuntime:
             if gateway.get("circulation") != "RUN":
                 self.command("circulation", "run")
             output["actuation_enabled"] = True
+            output["confirmation_available"] = confirmation_available(output)
             output["hardware_status"] = "CONNECTED — GUARDED PUMP GATEWAY"
             output["outputs"] = {name: "OFF" for name in OUTPUTS}
             output["outputs"]["circulation_pump"] = "RUN (GPIO24 HIGH)"
@@ -127,6 +185,7 @@ class PumpRuntime:
             output["override"] = True
             output["override_reason"] = f"Pump controller fault: {exc}"
             output["actuation_enabled"] = False
+            output["confirmation_available"] = False
             output["hardware_status"] = stopped.status
             output["outputs"] = {name: "OFF / UNVERIFIED" for name in OUTPUTS}
             return output

@@ -450,6 +450,13 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
     mode: activeMode,
     requestedMode: selectedMode,
     modeOverride: state.automation.override ? state.automation.override_reason : null,
+    pumpAutomation: {
+      recommendations: Array.isArray(state.automation.recommendations)
+        ? state.automation.recommendations : [],
+      confirmationAvailable: state.automation.confirmation_available === true,
+      hardwareStatus: state.automation.hardware_status || "Unavailable",
+      actuationEnabled: state.automation.actuation_enabled === true
+    },
     updatedAt: liveSensors?.timestamp ?? sensorHealth?.timestamp ?? state.timestamp,
     systemStatus: sensorHealth?.status ?? liveSensors?.system?.overall_status ?? state.system_status ?? "UNAVAILABLE",
     sensors,
@@ -629,7 +636,8 @@ export class VerdeApi {
       payload = null;
     }
     if (!response.ok) {
-      const error = new Error(payload?.error || `VERDE backend request failed (HTTP ${response.status}).`);
+      const error = new Error(payload?.error || payload?.detail || payload?.status ||
+        `VERDE backend request failed (HTTP ${response.status}).`);
       error.status = response.status;
       throw error;
     }
@@ -763,8 +771,26 @@ export class VerdeApi {
       activeMode: normalized.mode,
       message: overridden
         ? `${normalized.requestedMode} was requested, but the safety override keeps ${normalized.mode} active.`
-        : `Operating mode changed to ${normalized.mode}. Physical outputs remain disabled.`
+        : `Operating mode changed to ${normalized.mode}. ${normalized.pumpAutomation.actuationEnabled ? "Guarded pump control is active." : "Pump control remains disarmed."}`
     };
+  }
+
+  async confirmDose() {
+    const post = async (refreshToken = false) => this.request("/api/confirm", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-VERDE-Token": await this.sessionToken(refreshToken)
+      },
+      body: JSON.stringify({})
+    });
+    try {
+      return await post(false);
+    } catch (error) {
+      if (error.status !== 403) throw error;
+      this.token = null;
+      return post(true);
+    }
   }
 
   async acknowledgeIssue(issueKey) {

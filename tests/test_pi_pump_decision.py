@@ -133,6 +133,23 @@ class PumpDecisionTests(unittest.TestCase):
         decision = choose(sensors=live, circulation_flow_gpio_level="HIGH")
         self.assertEqual((decision.pump, decision.circulation), (None, "STOP"))
 
+    def test_semi_requires_confirmation_and_rejects_noncorrectable_critical(self):
+        high_ph = sensors(ph=8.5)
+        self.assertIsNone(choose(selected_mode=SEMI, sensors=high_ph,
+                                 water_class="Critical").pump)
+        confirmed = choose(selected_mode=SEMI, sensors=high_ph,
+                           water_class="Critical", farmer_confirmed=True,
+                           circulation_flow_gpio_level="HIGH")
+        self.assertEqual((confirmed.pump, confirmed.circulation), ("pump3", "RUN"))
+        high_turbidity = sensors(ph=5.2)
+        high_turbidity["turbidity"]["classification"] = "CRITICAL"
+        self.assertIsNone(choose(selected_mode=SEMI, sensors=high_turbidity,
+                                 water_class="Critical", farmer_confirmed=True).pump)
+        faulty = sensors(ph=5.2)
+        faulty["ph"]["status"] = "ERROR"
+        self.assertIsNone(choose(selected_mode=SEMI, sensors=faulty,
+                                 farmer_confirmed=True).pump)
+
 
 if __name__ == "__main__":
     unittest.main()

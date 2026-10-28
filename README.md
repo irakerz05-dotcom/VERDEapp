@@ -429,3 +429,19 @@ reader with `python3 deploy/apply_pi_sms_confirmation.py --check` followed by
 The sender waits for a final `+CMGS` and `OK` response. If confirmation never
 arrives, it records `UNCONFIRMED` rather than claiming delivery or retrying an
 SMS that might already have been accepted.
+
+To space all GSM alerts and notices, install the shared 30-second SMS gap:
+
+```bash
+cd ~/VERDEapp
+python3 deploy/apply_pi_sms_spacing.py --check
+python3 deploy/apply_pi_sms_spacing.py --apply
+python3 -m py_compile ~/VERDE-Sensor-Integration/app/service.py \
+  ~/VERDE-Sensor-Integration/app/notifications/__init__.py
+sudo systemctl restart verde.service
+```
+
+This applies to different alert types as well as retries after a modem error.
+An SMS waiting for its turn stays pending while its issue remains active; it is
+not sent if the issue clears first. The gap is measured within the running
+service and resets when the service restarts. The installer sends no test SMS.

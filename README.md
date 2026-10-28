@@ -570,3 +570,13 @@ The policy requires recorded cumulative volume to enforce its limits; a
 missing record blocks dosing. Physical control remains disabled until the
 existing manual pump controller can be invoked securely and GPIO24's actual
 flow and stop behavior has been checked with the NC load.
+
+The circulation pump was observed flowing with GPIO24 in `no pd` mode. That
+does not establish its driven HIGH/LOW behavior. The existing manual
+`circulation on/pause` commands assume LOW=flow and must not be used for this
+verification. With a person watching actual water flow, run
+`sudo python3 deploy/verify_pi_circulation_gpio24.py --run` from `~/VERDEapp`.
+It checks that physical output is disabled, drives HIGH for at most five
+seconds, restores `no pd`, then drives LOW for at most five seconds and restores
+`no pd` again. Record whether water flowed in each state. A relay LED alone
+does not answer this question. The test does not enable automation or dose.

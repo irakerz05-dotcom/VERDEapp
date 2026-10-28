@@ -60,7 +60,7 @@ def sample(label, relay, ph, ec, seconds, interval=4):
         time.sleep(min(interval, remaining))
 
 
-def run_diagnostic():
+def run_diagnostic(recovery_seconds):
     from gpiozero import OutputDevice
     import board
     import busio
@@ -91,7 +91,7 @@ def run_diagnostic():
         relay.off()
         sample("relay.off", relay, ph, ec, 8)
         relay.on()
-        sample("relay.on", relay, ph, ec, 32)
+        sample("relay.on", relay, ph, ec, recovery_seconds)
         relay.off()
         sample("relay.off_again", relay, ph, ec, 8)
     finally:
@@ -114,10 +114,13 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--run", action="store_true")
+    parser.add_argument("--recovery-seconds", type=int, default=32)
     args = parser.parse_args()
+    if not 16 <= args.recovery_seconds <= 180:
+        parser.error("--recovery-seconds must be between 16 and 180")
     preflight()
     if args.run:
-        run_diagnostic()
+        run_diagnostic(args.recovery_seconds)
 
 
 if __name__ == "__main__":

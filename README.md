@@ -580,3 +580,16 @@ It checks that physical output is disabled, drives HIGH for at most five
 seconds, restores `no pd`, then drives LOW for at most five seconds and restores
 `no pd` again. Record whether water flowed in each state. A relay LED alone
 does not answer this question. The test does not enable automation or dose.
+
+Two supervised repetitions subsequently observed GPIO24 HIGH=water flowing,
+LOW=water stopped, and baseline `no pd`=flowing. The circulation pump was
+unplugged again while configuring the integration. The protected gateway
+installer, `deploy/install_pi_auto_pump_gateway.py`, copies the existing
+manual controller to a root-owned directory and adds a scoped service command
+path. It starts disarmed and changes no GPIO. Its root-owned ledger enforces
+one dosing command at a time, at most five seconds per command, at least one
+minute between completed doses, and rolling 24-hour limits of 10 mL nutrients,
+5.86 mL pH Up, and 4.1 mL pH Down at the assumed 0.82 mL/s flow. An
+interrupted dose remains blocked pending manual inspection. Arming requires
+the circulation pump reconnected and actual flow observed; the web service
+still uses `DisabledActuators` until a separate backend integration is applied.

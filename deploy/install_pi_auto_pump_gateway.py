@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Install a protected, disarmed gateway around VERDE's manual pump code."""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import os
+import shutil
+import subprocess
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+
+SOURCE_CONTROLLER = Path("/home/verde/verde_manual_pumps.py")
+SOURCE_GATEWAY = Path(__file__).with_name("pi_auto_pump_driver.py")
+TARGET_DIRECTORY = Path("/usr/local/libexec")
+TARGET_CONTROLLER = TARGET_DIRECTORY / "verde_manual_pumps.py"
+TARGET_GATEWAY = TARGET_DIRECTORY / "verde_auto_pumps.py"
+SUDOERS = Path("/etc/sudoers.d/verde-auto-pumps")
+STATE_DIRECTORY = Path("/var/lib/verde")
+ARM_DIRECTORY = Path("/etc/verde")
+ARM_PATH = ARM_DIRECTORY / "pumps-armed"
+SUDOERS_TEXT = """# VERDE protected pump gateway. arm/disarm require interactive sudo.
+verde ALL=(root) NOPASSWD: /usr/local/libexec/verde_auto_pumps.py status, /usr/local/libexec/verde_auto_pumps.py safe-off, /usr/local/libexec/verde_auto_pumps.py circulation *, /usr/local/libexec/verde_auto_pumps.py dose *
+"""
+
+
+def validate_manual_source(source):
+    tree = ast.parse(source, filename=str(SOURCE_CONTROLLER))
+    names = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+    needed = {"set_level", "pin_state", "require_dosing_off", "lock_control",
+              "dose", "dosing_off"}
+    if not needed <= names:
+        raise ValueError(f"Manual controller methods changed: {sorted(needed - names)}")
+    anchors = (
+        'DOSING_PINS = {"pump1": 27, "pump2": 22, "pump3": 23}',
+        "CIRCULATION_PIN = 24", "MAX_SECONDS = 5.0",
+        'set_level(pin, "dh")  # Return the selected relay to OFF even on error.',
+        "require_dosing_off()",
+    )
+    for anchor in anchors:
+        if source.count(anchor) < 1:
+            raise ValueError(f"Manual controller safety anchor changed: {anchor}")
+    compile(source, str(SOURCE_CONTROLLER), "exec")
+
+
+def install_file(source_bytes, target, mode):
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(source_bytes)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chown(temporary, 0, 0)
+        os.chmod(temporary, mode)
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--check", action="store_true")
+    mode.add_argument("--apply", action="store_true")
+    args = parser.parse_args()
+    manual_source = SOURCE_CONTROLLER.read_text(encoding="utf-8")
+    gateway_source = SOURCE_GATEWAY.read_text(encoding="utf-8")
+    validate_manual_source(manual_source)
+    compile(gateway_source, str(SOURCE_GATEWAY), "exec")
+    if args.check:
+        print("Ready: reviewed manual GPIO mapping, five-second limit, "
+              "protected gateway syntax; no files changed")
+        return
+    if os.geteuid() != 0:
+        parser.error("--apply requires sudo")
+    if shutil.which("visudo") is None:
+        parser.error("visudo is unavailable; sudoers was not changed")
+    if ARM_PATH.exists():
+        parser.error("Pump gateway is armed; disarm it before updating protected files")
+    TARGET_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    for directory in (TARGET_DIRECTORY, SUDOERS.parent):
+        metadata = directory.stat()
+        if metadata.st_uid != 0 or metadata.st_mode & 0o022:
+            parser.error(f"Protected installation directory is writable: {directory}")
+    STATE_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    ARM_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    os.chown(STATE_DIRECTORY, 0, 0)
+    os.chmod(STATE_DIRECTORY, 0o700)
+    os.chown(ARM_DIRECTORY, 0, 0)
+    os.chmod(ARM_DIRECTORY, 0o700)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    for target in (TARGET_CONTROLLER, TARGET_GATEWAY, SUDOERS):
+        if target.exists():
+            backup = target.with_name(f"{target.name}.before_auto_pumps_{stamp}")
+            shutil.copy2(target, backup)
+            print(f"Backup: {backup}")
+    install_file(manual_source.encode(), TARGET_CONTROLLER, 0o755)
+    install_file(gateway_source.encode(), TARGET_GATEWAY, 0o755)
+    # Validate the exact candidate before it can become an active sudoers rule.
+    descriptor, candidate = tempfile.mkstemp(prefix=".verde-auto-pumps.", dir=SUDOERS.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(SUDOERS_TEXT)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chown(candidate, 0, 0)
+        os.chmod(candidate, 0o440)
+        subprocess.run((shutil.which("visudo"), "-cf", candidate), check=True, timeout=10)
+        os.replace(candidate, SUDOERS)
+    finally:
+        if os.path.exists(candidate):
+            os.unlink(candidate)
+    print(f"Installed protected manual copy: {TARGET_CONTROLLER}")
+    print(f"Installed disarmed gateway: {TARGET_GATEWAY}")
+    print(f"Installed scoped sudoers rule: {SUDOERS}")
+    print("Controller remains DISARMED. No GPIO was switched and no dose was sent.")
+
+
+if __name__ == "__main__":
+    main()

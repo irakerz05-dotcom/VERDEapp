@@ -6,7 +6,6 @@ tool does not edit calibration, backend code, or recorded sensor history.
 """
 
 import argparse
-import os
 import subprocess
 import time
 from pathlib import Path
@@ -68,8 +67,6 @@ def run_diagnostic():
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
 
-    if os.geteuid() != 0:
-        raise PermissionError("Run --run with sudo so the service is always restored")
     relay = None
     i2c = None
     was_active = subprocess.run(
@@ -77,8 +74,11 @@ def run_diagnostic():
     ).returncode == 0
     if not was_active:
         raise RuntimeError("VERDE service is not active; diagnostic did not change it")
+    # Keep Python in the verde user's environment, where Blinka is installed.
+    # Authenticate sudo before the service is stopped so cleanup can restart it.
+    subprocess.run(["sudo", "-v"], check=True)
     print("Stopping verde.service for an exclusive, read-only ADC check", flush=True)
-    subprocess.run(["systemctl", "stop", SERVICE], check=True)
+    subprocess.run(["sudo", "systemctl", "stop", SERVICE], check=True)
     try:
         relay = OutputDevice(25, active_high=False, initial_value=False)
         i2c = busio.I2C(board.SCL, board.SDA)
@@ -105,7 +105,7 @@ def run_diagnostic():
                 i2c.deinit()
         finally:
             print("Starting verde.service", flush=True)
-            subprocess.run(["systemctl", "start", SERVICE], check=True)
+            subprocess.run(["sudo", "systemctl", "start", SERVICE], check=True)
             subprocess.run(["systemctl", "is-active", SERVICE], check=True)
 
 

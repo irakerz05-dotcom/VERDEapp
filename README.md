@@ -593,3 +593,15 @@ minute between completed doses, and rolling 24-hour limits of 10 mL nutrients,
 interrupted dose remains blocked pending manual inspection. Arming requires
 the circulation pump reconnected and actual flow observed; the web service
 still uses `DisabledActuators` until a separate backend integration is applied.
+
+`deploy/apply_pi_pump_runtime.py` installs that separate service integration
+after the protected gateway is installed. It backs up the Pi service, copies
+the guarded decision and runtime modules, and does not restart the service.
+On restart, the service requests dosing pins OFF and circulation STOP, then
+reports a Semi-Automation safety override while the gateway is disarmed.
+Armed operation uses the integrated live sensor snapshot, respects the
+60-second mixing wait and root-owned 24-hour volume ledger, and runs
+circulation at GPIO24 HIGH in both modes unless a Critical/fault override
+requires LOW/STOP. Temporary unclassified vision holds dosing without
+stopping circulation. Semi-Automation dose confirmation remains blocked until
+its separate confirmation endpoint is integrated and tested.

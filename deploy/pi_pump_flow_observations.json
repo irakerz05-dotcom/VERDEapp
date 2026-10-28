@@ -1,0 +1,23 @@
+{
+  "recorded_on": "2026-10-29",
+  "units": "mL/s",
+  "pump1": {
+    "role": "nutrient_dosing",
+    "gpio_bcm": 27,
+    "estimated_flow_mL_per_s": 0.82,
+    "basis": "User-reported collection: 4.1 mL in 5 s; corrected total 8.2 mL in 10 s"
+  },
+  "pump2": {
+    "role": "ph_up",
+    "gpio_bcm": 22,
+    "estimated_flow_mL_per_s": 0.82,
+    "basis": "Assumed equal to Pump 1 at user direction; not separately measured"
+  },
+  "pump3": {
+    "role": "ph_down",
+    "gpio_bcm": 23,
+    "estimated_flow_mL_per_s": 0.82,
+    "basis": "Assumed equal to Pump 1 at user direction; not separately measured"
+  },
+  "control_use": "Planning estimates only. Dose-response and short-pulse delivery are unverified; this record does not enable automatic actuation."
+}

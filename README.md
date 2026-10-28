@@ -524,3 +524,35 @@ higher point it is extrapolated. The tap-water meter temperature was not
 recorded, and no temperature compensation was derived. Older EC History and
 the real-data RF pilot used a different conversion, so their values are not
 directly comparable. A Critical EC condition may send SMS after the restart.
+
+# Pi live automation mode source
+
+The pre-pump savepoint is Git tag `pre-pump-automation-20261029` and the Pi
+archive is `/home/verde/verde-pre-pump-automation-20261029-014001.tar.gz`.
+The initial mode evaluator reads legacy disabled adapters on the Pi, so it may
+report a safety override while the integrated pH, EC, temperature, and
+turbidity cache is healthy. To change only the mode decision source:
+
+```bash
+cd ~/VERDEapp
+python3 deploy/apply_pi_live_automation_mode.py --check
+python3 deploy/apply_pi_live_automation_mode.py --apply
+python3 -m py_compile ~/VERDE-Sensor-Integration/app/service.py \
+  ~/VERDE-Sensor-Integration/app/automation/live_mode.py
+sudo systemctl restart verde.service
+```
+
+The installer backs up `app/service.py`, validates exact source anchors,
+and never writes GPIO. Physical outputs remain disabled. A Critical water
+condition, persistent required-sensor fault, stale acquisition, camera fault,
+or plant-model fault moves a requested Full mode to Semi. The farmer must
+select Full again after the condition clears. Humidity is excluded from this
+override. Temporary recovery or no plant detection holds dosing eligibility
+without treating either as a confirmed hardware fault.
+
+The separate `pi_pump_decision.py` module is a proposed, pure decision policy;
+it is not installed by this mode patch. It uses a 60-second mixing wait and
+requires an explicit dose duration and physically verified GPIO24 flow level.
+`pi_pump_flow_observations.json` records Pump 1 at 0.82 mL/s, Pumps 2 and 3
+as shared-model estimates, and the 20 L operating reservoir. Those values
+do not activate pumps or establish a chemical dose.

@@ -1,0 +1,90 @@
+diff --git a/app/notifications/__init__.py b/app/notifications/__init__.py
+index 2117717..5075df0 100644
+--- a/app/notifications/__init__.py
++++ b/app/notifications/__init__.py
+@@ -117,10 +117,8 @@ class SIM800GSM(Notifier):
+     def should_notify(self, issue_key, issue):
+         if not self.enabled or not self.recipient:
+             return False
+-        if re.fullmatch(r"vision:slot:(10|[1-9]):(harvest_ready|fault)", issue_key):
++        if re.fullmatch(r"vision:slot:(10|[1-9]):harvest_ready", issue_key):
+             return True
+-        if issue_key == "vision:unclassified_slots":
+-            return issue.get("severity") == "critical"
+         if issue_key in self.NOTIFIABLE:
+             return True
+         if issue.get("severity") != "critical":
+diff --git a/app/notifications/alert_policy.py b/app/notifications/alert_policy.py
+index 0f1c97d..63a9197 100644
+--- a/app/notifications/alert_policy.py
++++ b/app/notifications/alert_policy.py
+@@ -41,17 +41,6 @@ def enrich_issues(issues, live_snapshot=None, fusion_by_slot=None):
+ 
+     if isinstance(fusion_by_slot, list):
+         issues.pop("vision:harvest_ready", None)
+-        global_vision_fault = any(key in issues for key in
+-                                  ("vision:camera", "vision:plant_model"))
+-        if (not global_vision_fault and len(fusion_by_slot) == 10
+-                and all(isinstance(row, dict) and row.get("plant_condition") == "Faulty Vision"
+-                        for row in fusion_by_slot)):
+-            global_vision_fault = True
+-            issues["vision:camera"] = {
+-                "source": "vision", "severity": "critical",
+-                "message": "Camera or plant analysis is unavailable. Check the camera image.",
+-            }
+-        unclassified = []
+         for row in fusion_by_slot:
+             if not isinstance(row, dict):
+                 continue
+@@ -64,16 +53,8 @@ def enrich_issues(issues, live_snapshot=None, fusion_by_slot=None):
+                     "source": "vision", "severity": "notice",
+                     "message": f"Plant {slot} is now Harvest-Ready. Check its planting date and harvest schedule.",
+                 }
+-            elif condition == "Faulty Vision" and not global_vision_fault:
+-                unclassified.append(slot)
+-        if unclassified:
+-            slots = sorted(set(unclassified))
+-            numbers = ", ".join(str(slot) for slot in slots)
+-            issues["vision:unclassified_slots"] = {
+-                "source": "vision", "severity": "critical",
+-                "message": f"Camera could not classify plant slots {numbers}. Check the image and camera.",
+-                "slots": slots,
+-            }
++            # A detected plant without a confident label is shown in the
++            # per-slot fusion view. It is not evidence of a camera failure.
+     elif "vision:harvest_ready" in issues:
+         issues["vision:harvest_ready"] = {
+             "source": "vision", "severity": "notice",
+diff --git a/app/notifications/sms_text.py b/app/notifications/sms_text.py
+index 776deec..9021fc1 100644
+--- a/app/notifications/sms_text.py
++++ b/app/notifications/sms_text.py
+@@ -25,18 +25,10 @@ MESSAGES = {
+ 
+ def format_sms_alert(issue_key, issue):
+     """Never send the incident's raw exception or hardware identifiers by SMS."""
+-    slot = re.fullmatch(r"vision:slot:(10|[1-9]):(harvest_ready|fault)", issue_key)
++    slot = re.fullmatch(r"vision:slot:(10|[1-9]):harvest_ready", issue_key)
+     if slot:
+-        number, kind = slot.groups()
+-        message = (f"Plant {number} is now Harvest-Ready. Check the harvest schedule."
+-                   if kind == "harvest_ready" else
+-                   f"Plant {number} camera result is unavailable. Check the camera and image.")
+-    elif issue_key == "vision:unclassified_slots":
+-        slots = issue.get("slots")
+-        valid = (isinstance(slots, list) and slots and len(slots) <= 10
+-                 and all(type(number) is int and 1 <= number <= 10 for number in slots))
+-        numbers = ", ".join(str(number) for number in slots) if valid else "unknown"
+-        message = f"Camera could not classify plant slots {numbers}. Check the image and camera."
++        number = slot.group(1)
++        message = f"Plant {number} is now Harvest-Ready. Check the harvest schedule."
+     elif issue_key.startswith("sensor:") and issue_key.endswith(":critical"):
+         name = issue_key.split(":", 2)[1]
+         sensor = SENSOR_NAMES.get(name)
+@@ -54,5 +46,5 @@ def format_sms_alert(issue_key, issue):
+                    if sensor else "A sensor is not working. Please check the VERDE app.")
+     else:
+         message = MESSAGES.get(issue_key, "A system problem needs attention. Please check the VERDE app.")
+-    prefix = "VERDE notice: " if slot and slot.group(2) == "harvest_ready" or issue_key == "vision:harvest_ready" else "VERDE alert: "
++    prefix = "VERDE notice: " if slot or issue_key == "vision:harvest_ready" else "VERDE alert: "
+     return prefix + message

@@ -415,3 +415,10 @@ The installer backs up the touched backend files and never sends a test SMS.
 After restarting, inspect `journalctl -u verde.service` and the app's Alerts
 page during a real qualifying event. Do not deliberately induce a water or
 camera fault just to test alerts.
+
+For an existing alert v1 installation, also run
+`python3 deploy/apply_pi_alerts_v3.py --check` and then
+`python3 deploy/apply_pi_alerts_v3.py --apply` before restarting. This replaces
+the earlier v2 alert grouping: temporarily unclassified plant slots remain
+visible in per-slot fusion and do not trigger a Faulty Vision SMS. Actual
+camera capture or plant-analysis failures still qualify for SMS.

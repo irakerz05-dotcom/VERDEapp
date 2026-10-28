@@ -166,13 +166,14 @@ test("GPIO5 turbidity reports only a fresh digital level, never NTU", () => {
 });
 
 test("a project-reference NTU reading remains numeric with metadata retained", () => {
-  const sensor = { value_ntu: 1.0, status: "CALIBRATED", classification: "OPTIMAL",
+  const sensor = { value_ntu: 0.3, reference_ntu: 0.3, status: "CALIBRATED", classification: "OPTIMAL",
     reference_voltage_V: 0.5762, raw_voltage_V: 0.5761, filtered_voltage_V: 0.5762 };
   const reading = normalizeLiveSensorSnapshot({ sensors: { turbidity: sensor } })
     .find((item) => item.label === "Turbidity");
-  assert.equal(reading.value, "1.0000");
+  assert.equal(reading.value, "0.3000");
   assert.equal(reading.unit, "NTU");
   assert.match(reading.detail, /Project NTU estimate/);
+  assert.match(reading.detail, /user-assigned 0\.3 reference/);
   assert.match(reading.detail, /0\.5762 V/);
 });
 

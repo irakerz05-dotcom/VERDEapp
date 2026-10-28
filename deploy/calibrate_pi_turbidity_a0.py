@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Set a project-relative A0 turbidity reference from cached Pi sensor samples.
 
-The farmer designates the current drinking water as 1.0 NTU. This is a single
-point estimate, not a certified NTU calibration. No GPIO/I2C access occurs here.
+The farmer designates the current drinking water as 0.3 estimated NTU. This is
+a project-relative response, not a certified NTU calibration. No GPIO/I2C access occurs here.
 Run --check first; --apply waits for five consecutive stable backend samples,
 backs up the old record, and saves a new A0 reference. Restart separately.
 """
@@ -44,11 +44,11 @@ def verify_service_source(path=SERVICE_SOURCE, channel="A0"):
     source = path.read_text(encoding="utf-8")
     checks = (
         (r'ADS1115_GAIN\s*=\s*1\b', "ADS1115 gain 1"),
-        (r'TURBIDITY_REFERENCE_NTU\s*=\s*1\.0\b', "1.0 reference"),
+        (r'TURBIDITY_REFERENCE_NTU\s*=\s*0\.3\b', "0.3 project reference"),
         (rf'"turbidity"\s*,\s*AnalogIn\(self\.ads,\s*ADS\.P{channel[-1]}\)', f"{channel} input"),
         (rf'record\.get\("ads_channel"\)\s*!=\s*"{channel}"', f"{channel} record guard"),
         (r'record\.get\("calibration_status"\)\s*!=\s*"CALIBRATED"', "record status guard"),
-        (r'TURBIDITY_REFERENCE_NTU\s*\*\s*abs\(reference_voltage\)\s*/\s*abs\(measured_voltage\)',
+        (r'TURBIDITY_REFERENCE_NTU\s*\*\s*\(abs\(reference_voltage\)\s*/\s*abs\(measured_voltage\)\)\s*\*\*\s*2',
          "project-relative NTU equation"),
     )
     for expression, description in checks:
@@ -144,17 +144,18 @@ def record_for(samples, summary, channel="A0"):
         "sensor_type": "SEN0189-compatible analog turbidity sensor",
         "ads_channel": channel, "ads_gain": 1,
         "calibration_datetime": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "reference_sample": "Drinking water designated 1.0 NTU by project operator; not certified",
-        "reference_ntu": 1.0,
+        "reference_sample": "Drinking water designated 0.3 project-estimated NTU by operator; not certified",
+        "reference_ntu": 0.3,
         "reference_voltage_V": summary["reference_voltage_V"],
         "voltage_statistics": {"sample_count": len(samples), **summary,
                                "samples": samples},
         "calibration_method": f"Median of five distinct cached ADS1115 {channel} samples; no direct hardware reads",
-        "calibration_equation": "Estimated NTU = 1.0 * abs(V_reference) / abs(V_measured)",
+        "calibration_equation": "Project-estimated NTU = 0.3 * (abs(V_reference) / abs(V_measured))^2",
         "sensor_direction": "Lower voltage gives a larger project NTU estimate",
         "reference_provenance": "USER_ASSIGNED_UNCERTIFIED",
         "calibration_status": "CALIBRATED",
-        "interpretation": "Single-point project estimate, not a validated physical NTU measurement",
+        "interpretation": "Unvalidated project-relative display estimate; not measured standard NTU. The squared response is an assumed sensitivity, not a DFRobot calibration curve.",
+        "conversion_version": "PROJECT_RELATIVE_SQUARED_V1",
     }
     if channel == "A0":
         ratio = A0_DIVIDER_BOTTOM_OHMS / (A0_DIVIDER_TOP_OHMS + A0_DIVIDER_BOTTOM_OHMS)
@@ -220,7 +221,7 @@ def main():
     samples, summary = capture(after_sample=current["sample"], channel=args.channel)
     record = record_for(samples, summary, channel=args.channel)
     backup = save_record(record, replace_existing=args.replace_existing)
-    print(f"Saved {args.channel} reference: {summary['reference_voltage_V']:.6f} V = project-assigned 1.0 NTU")
+    print(f"Saved {args.channel} reference: {summary['reference_voltage_V']:.6f} V = project-estimated 0.3 NTU")
     print(f"Prior record backup: {backup}")
     print("The service was NOT restarted. Restart at a safe time to load the reference.")
 

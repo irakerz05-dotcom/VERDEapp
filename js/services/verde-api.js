@@ -186,7 +186,8 @@ function liveSensorDetail(key, sensor, healthStatus) {
   if (["ph", "ec"].includes(key)) return "";
   if (key === "turbidity") {
     const reference = finiteNumber(sensor.reference_voltage_V);
-    return reference === null ? "" : `Project NTU estimate · user-assigned 1.0 reference at ${reference.toFixed(4)} V`;
+    const referenceNtu = finiteNumber(sensor.reference_ntu);
+    return reference === null || referenceNtu === null ? "" : `Project NTU estimate · user-assigned ${referenceNtu.toFixed(1)} reference at ${reference.toFixed(4)} V`;
   }
   const details = [];
   const backendStatus = String(sensor.status ?? healthStatus ?? "").trim();

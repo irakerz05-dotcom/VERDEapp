@@ -464,3 +464,23 @@ and adjusts only the pH intercept. The existing slope is retained. This is a
 single-point offset adjustment; checking the slope requires a second buffer.
 The script never reads hardware directly or sends a test SMS. After restart,
 check the live pH reading while the probe remains in the 6.86 buffer.
+
+For the later provisional **two-point commercial-meter fit**, the recorded
+references are 2.803375 V = 6.81 pH and 2.377750 V = 9.45 pH. The alkaline
+filtered voltage was repeated, but its raw voltage fluctuated; the meter also
+varied roughly 9.3–9.6 pH. The 4.41 acidic reference is excluded because its
+A1 voltage reached the ADC supply. Values below 6.81 pH therefore remain
+extrapolations, not validated by this fit.
+
+```bash
+cd ~/VERDEapp
+python3 deploy/apply_pi_ph_two_point.py --check
+python3 deploy/apply_pi_ph_two_point.py --apply
+python3 -m py_compile ~/VERDE-Sensor-Integration/verde_sensor_service.py
+sudo systemctl restart verde.service
+```
+
+The installer backs up the sensor service, writes a calibration provenance
+record in the Pi home directory, and changes only its pH slope and intercept.
+It does not send an SMS. After restarting, compare VERDE with the commercial
+meter in the same solution before using pH values for data gathering.

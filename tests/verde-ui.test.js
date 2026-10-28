@@ -50,17 +50,17 @@ test("service-worker assets match versioned index and module references", async 
     readFile(`${root}js/app.js`, "utf8")
   ]);
 
-  assert.match(index, /href="styles\.css\?v=51"/);
-  assert.match(index, /src="js\/app\.js\?v=51"/);
-  assert.match(app, /services\/verde-api\.js\?v=51/);
-  assert.match(app, /verde-ui\.js\?v=51/);
+  assert.match(index, /href="styles\.css\?v=52"/);
+  assert.match(index, /src="js\/app\.js\?v=52"/);
+  assert.match(app, /services\/verde-api\.js\?v=52/);
+  assert.match(app, /verde-ui\.js\?v=52/);
   assert.match(app, /sensor-detail/);
   assert.match(app, /Problem timeline/);
   assert.match(app, /Alerts & activity/);
-  assert.match(worker, /"\.\/styles\.css\?v=51"/);
-  assert.match(worker, /"\.\/js\/app\.js\?v=51"/);
-  assert.match(worker, /"\.\/js\/verde-ui\.js\?v=51"/);
-  assert.match(worker, /"\.\/js\/services\/verde-api\.js\?v=51"/);
+  assert.match(worker, /"\.\/styles\.css\?v=52"/);
+  assert.match(worker, /"\.\/js\/app\.js\?v=52"/);
+  assert.match(worker, /"\.\/js\/verde-ui\.js\?v=52"/);
+  assert.match(worker, /"\.\/js\/services\/verde-api\.js\?v=52"/);
   const dashboard = app.split("function renderDashboard(data) {")[1]?.split("function plantAge(slot) {")[0];
   const plants = app.split("function renderPlants(data, slots = null) {")[1];
   assert.ok(dashboard);
@@ -75,4 +75,16 @@ test("service-worker assets match versioned index and module references", async 
   assert.match(app, /updateViaCache: "none"/);
   assert.match(app, /Acknowledge this incident/);
   assert.match(app, /data-retry-connection/);
+  const settings = app.split("function renderSettings(data, smsSettings = { supported: false }) {")[1]
+    ?.split("function unavailableSnapshot(error) {")[0];
+  const smsDialog = app.split("function showSmsSettingsDialog(settings) {")[1]
+    ?.split("function bindSmsSettingsButton(")[0];
+  assert.ok(settings);
+  assert.ok(smsDialog);
+  assert.match(settings, /GSM SMS alerts/);
+  assert.match(settings, /Mode: \$\{safe\(data\.settings\.gsmStatus/);
+  assert.doesNotMatch(settings, /Backend connection|The number is stored on the Pi|Changing it does not send a message/);
+  assert.match(smsDialog, /Current recipient:/);
+  assert.match(smsDialog, /Enter a new number to change it/);
+  assert.doesNotMatch(smsDialog, /Saving does not send a test SMS|Critical and persistent faulty conditions/);
 });

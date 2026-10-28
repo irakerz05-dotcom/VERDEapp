@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=51";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=51";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=52";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=52";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -209,16 +209,15 @@ function bindInstallButton() {
 function showSmsSettingsDialog(settings) {
   const dialog = document.createElement("dialog");
   const current = settings.recipient_configured
-    ? `Current recipient: ${safe(settings.recipient_masked || "number saved")}`
-    : "No recipient saved yet.";
+    ? `Current recipient: ${safe(settings.recipient_masked || "number saved")}. Enter a new number to change it.`
+    : "No recipient saved yet. Enter a mobile number.";
   dialog.innerHTML = `<form id="sms-settings-form">
     <h2>SMS alert destination</h2>
-    <p>${current} Enter a new number to change it. Saving does not send a test SMS.</p>
+    <p>${current}</p>
     <label class="sms-field" for="sms-recipient">Mobile number</label>
     <input id="sms-recipient" name="recipient" type="tel" inputmode="tel" autocomplete="tel"
       pattern="[+]?[0-9]{7,15}" maxlength="16" placeholder="+639171234567" />
     <label class="sms-toggle"><input name="sms_enabled" type="checkbox"${settings.sms_enabled ? " checked" : ""} /> Enable SMS alerts for new qualifying events</label>
-    <p class="sms-note">Critical and persistent faulty conditions, critical turbidity, Harvest-Ready, and pest detection are SMS events. Routine temperature and humidity deviations remain dashboard warnings. A service restart may reopen existing incidents.</p>
     <p class="sms-form-error" role="alert" hidden></p>
     <div class="dialog-actions"><button type="button" data-sms-cancel class="secondary">Cancel</button><button type="submit" class="primary">Save settings</button></div>
   </form>`;
@@ -498,14 +497,13 @@ function renderSettings(data, smsSettings = { supported: false }) {
   const installLabel = installed ? "Installed" : deferredInstallPrompt ? "Install app" : "Installation help";
   const smsSupported = smsSettings?.supported !== false && typeof smsSettings?.sms_enabled === "boolean";
   const smsSummary = smsSupported
-    ? `${smsSettings.sms_enabled ? "Enabled" : "Disabled"} · ${smsSettings.recipient_configured ? `Recipient ${smsSettings.recipient_masked || "saved"}` : "No recipient saved"}${smsSettings.modem_configured ? "" : " · GSM port not configured"}`
+    ? `${smsSettings.sms_enabled ? "Enabled" : "Disabled"} · ${smsSettings.recipient_configured ? `Recipient ${smsSettings.recipient_masked || "saved"}` : "No recipient saved"}`
     : "Backend SMS settings are unavailable. Update the Pi backend to configure alerts here.";
   const content = `<section class="page-title"><h2>Settings</h2><p>${safe(sourceLabel(data))}</p></section>
     <section class="settings-list">
-      <article><div><h2>Backend connection</h2><p>${data.isMock ? "Explicit development adapter; no hardware connection." : "Same-origin connection to the local VERDE service."}</p></div><span>${safe(data.settings.backendLabel)}</span></article>
       <article><div><h2>Install on this device</h2><p>Installation requires the private HTTPS address. Live readings still require a connection to the Raspberry Pi.</p></div><button data-install-button type="button" class="secondary"${installed ? " disabled" : ""}>${installLabel}</button></article>
       <article><div><h2>Operating mode</h2><p>Active: ${safe(data.mode)} · Requested: ${safe(data.requestedMode || data.mode)}. Safety validation is enforced by the backend.</p></div><button data-mode-button type="button" class="secondary">Change mode</button></article>
-      <article><div><h2>GSM SMS alerts</h2><p>${safe(smsSummary)}</p><p>Modem: ${safe(data.settings.gsmStatus || "Unavailable")}. The number is stored on the Pi, not in this browser. Changing it does not send a message.</p></div>${smsSupported ? '<button data-sms-settings type="button" class="secondary">Configure</button>' : ""}</article>
+      <article><div><h2>GSM SMS alerts</h2><p>${safe(smsSummary)}</p><p>Mode: ${safe(data.settings.gsmStatus || "Unavailable")}</p></div>${smsSupported ? '<button data-sms-settings type="button" class="secondary">Configure</button>' : ""}</article>
       <article><div><h2>Application version</h2><p>VERDE monitoring PWA</p></div><span>${safe(data.settings.version)}</span></article>
     </section>`;
   app.innerHTML = renderShell(content, data);
@@ -628,7 +626,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=51", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=52", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

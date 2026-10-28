@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=53";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=53";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=54";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=54";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -96,8 +96,8 @@ function renderShell(content, data) {
 function renderCard(sensor) {
   const tone = statusClass(sensor.status);
   const marker = tone === "good" ? "✓" : tone === "danger" ? "!" : "·";
-  const showDetail = sensor.detail && ((sensor.status === "Recovering" && sensor.label === "Water Temperature")
-    || !["Turbidity", "Water Temperature", "Humidity"].includes(sensor.label));
+  const showDetail = sensor.detail && sensor.status !== "Recovering"
+    && !["Turbidity", "Water Temperature", "Humidity"].includes(sensor.label);
   return `<article class="sensor-card">
     <span class="sensor-icon" aria-hidden="true">${safe(sensor.icon)}</span>
     <div><h2>${safe(sensor.label)}</h2><p class="reading">${safe(sensor.value)}<small>${safe(sensor.unit)}</small></p>
@@ -626,7 +626,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=53", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=54", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

@@ -15,6 +15,8 @@ FULL = "Full Automation Mode"
 SEMI = "Semi-Automation Mode"
 MIX_SECONDS = 60.0
 MAX_SAMPLE_AGE_SECONDS = 65.0
+DOSE_VOLUME_ML = 1.0
+COURSE_LIMIT_ML = {"pump1": 10.0, "pump2": 5.86, "pump3": 3.98}
 PUMP_BY_ACTION = {
     "nutrient_dosing": "pump1",  # GPIO27
     "ph_up": "pump2",           # GPIO22
@@ -32,6 +34,7 @@ class Decision:
     dose_action: str | None
     pump: str | None
     dose_seconds: float | None
+    dose_ml: float | None
 
 
 def _finite(value):
@@ -62,7 +65,7 @@ def _sensor_fault(sensor):
 def decide(*, selected_mode, override_latched, request_full, sensors,
            snapshot_age_seconds, water_class, camera_fault, vision_fault,
            last_dose_elapsed_seconds, calibrated_dose_seconds,
-           circulation_flow_gpio_level):
+           circulation_flow_gpio_level, dosed_ml_by_pump=None):
     """Return a proposed action; no state or hardware is changed.
 
     ``request_full`` represents a fresh farmer action after an override. Merely
@@ -87,6 +90,12 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
              or snapshot_age_seconds > MAX_SAMPLE_AGE_SECONDS)
     critical = [name for name in required
                 if str((sensors.get(name) or {}).get("classification") or "").upper() == "CRITICAL"]
+    ph_value = (sensors.get("ph") or {}).get("value")
+    ec_value = (sensors.get("ec") or {}).get("value_mScm")
+    if _finite(ph_value) and (ph_value < 4.5 or ph_value > 8.0) and "ph" not in critical:
+        critical.append("ph")
+    if _finite(ec_value) and (ec_value < 0.5 or ec_value > 4.0) and "ec" not in critical:
+        critical.append("ec")
     if water_class == "Critical":
         critical.append("water quality")
     fault_reason = None
@@ -117,6 +126,7 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
     action = None
     pump = None
     seconds = None
+    dose_ml = None
     if (active_mode == FULL and reason is None and water_class in ("Optimal", "Suboptimal")
             and not camera_fault and not vision_fault):
         ph = sensors["ph"]["value"]
@@ -131,13 +141,18 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
         if action:
             pump = PUMP_BY_ACTION[action]
             duration = calibrated_dose_seconds.get(pump) if isinstance(calibrated_dose_seconds, dict) else None
+            prior_ml = (dosed_ml_by_pump or {}).get(pump) if isinstance(dosed_ml_by_pump, dict) else None
+            remaining_ml = (COURSE_LIMIT_ML[pump] - prior_ml
+                            if _finite(prior_ml) and prior_ml >= 0 else 0.0)
+            next_ml = min(DOSE_VOLUME_ML, max(0.0, remaining_ml))
             mixed = (last_dose_elapsed_seconds is None
                      or (_finite(last_dose_elapsed_seconds)
                          and last_dose_elapsed_seconds >= MIX_SECONDS))
-            if not mixed or not _finite(duration) or not 0 < duration <= 5.0:
+            if not mixed or next_ml <= 0 or not _finite(duration) or not 0 < duration <= 5.0:
                 action = pump = None
             else:
-                seconds = float(duration)
+                seconds = float(duration) * next_ml / DOSE_VOLUME_ML
+                dose_ml = next_ml
 
     return Decision(active_mode, latched, reason, circulation,
-                    circulation_gpio_level, action, pump, seconds)
+                    circulation_gpio_level, action, pump, seconds, dose_ml)

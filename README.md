@@ -556,3 +556,16 @@ requires an explicit dose duration and physically verified GPIO24 flow level.
 `pi_pump_flow_observations.json` records Pump 1 at 0.82 mL/s, Pumps 2 and 3
 as shared-model estimates, and the 20 L operating reservoir. Those values
 do not activate pumps or establish a chemical dose.
+
+The current proposal limits one correction course to 5.86 mL pH Up (Pump 2),
+3.98 mL pH Down (Pump 3), or 10 mL nutrients (Pump 1). Each decision proposes
+at most 1 mL, about 1.22 seconds at the assumed 0.82 mL/s rate. The next
+decision must wait 60 seconds after the previous dose and use a fresh reading;
+it stops when the target range is reached or the course limit is spent.
+The pH course amounts are arithmetic estimates from the sequential 2 L test,
+not verified doses for the 20 L reservoir. A Critical reading, including
+pH 8.5 or EC 0.3 mS/cm, overrides to Semi and blocks automatic dosing.
+The policy requires recorded cumulative volume to enforce its limits; a
+missing record blocks dosing. Physical control remains disabled until the
+existing manual pump controller can be invoked securely and GPIO24's actual
+flow and stop behavior has been checked with the NC load.

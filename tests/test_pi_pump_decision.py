@@ -22,7 +22,9 @@ def choose(**overrides):
                      sensors=sensors(), snapshot_age_seconds=5, water_class="Suboptimal",
                      camera_fault=False, vision_fault=False,
                      last_dose_elapsed_seconds=None,
-                     calibrated_dose_seconds={"pump1": 1, "pump2": 1, "pump3": 1},
+                     calibrated_dose_seconds={"pump1": 1 / 0.82, "pump2": 1 / 0.82,
+                                              "pump3": 1 / 0.82},
+                     dosed_ml_by_pump={"pump1": 0.0, "pump2": 0.0, "pump3": 0.0},
                      circulation_flow_gpio_level=None)
     arguments.update(overrides)
     return decide(**arguments)
@@ -56,6 +58,29 @@ class PumpDecisionTests(unittest.TestCase):
                                  calibrated_dose_seconds={}).pump)
         self.assertIsNone(choose(sensors=sensors(ph=5.2),
                                  calibrated_dose_seconds={"pump2": 5.1}).pump)
+
+    def test_one_ml_steps_and_ten_ml_nutrient_course_limit(self):
+        nutrient = choose(sensors=sensors(ec=1.0),
+                          dosed_ml_by_pump={"pump1": 9.0})
+        self.assertEqual(nutrient.pump, "pump1")
+        self.assertEqual(nutrient.dose_ml, 1.0)
+        self.assertAlmostEqual(nutrient.dose_seconds, 1.219512195, places=7)
+        self.assertIsNone(choose(sensors=sensors(ec=1.0),
+                                 dosed_ml_by_pump={"pump1": 10.0}).pump)
+        self.assertIsNone(choose(sensors=sensors(ec=1.0),
+                                 dosed_ml_by_pump={}).pump)
+        self.assertEqual(choose(sensors=sensors(ph=5.2)).dose_ml, 1.0)
+        ph_up_last = choose(sensors=sensors(ph=5.2),
+                            dosed_ml_by_pump={"pump2": 5.0})
+        self.assertAlmostEqual(ph_up_last.dose_ml, 0.86)
+        self.assertAlmostEqual(ph_up_last.dose_seconds, 0.86 / 0.82)
+        self.assertIsNone(choose(sensors=sensors(ph=5.2),
+                                 dosed_ml_by_pump={"pump2": 5.86}).pump)
+        ph_down_last = choose(sensors=sensors(ph=6.8),
+                              dosed_ml_by_pump={"pump3": 3.0})
+        self.assertAlmostEqual(ph_down_last.dose_ml, 0.98)
+        self.assertAlmostEqual(ph_down_last.dose_seconds, 0.98 / 0.82)
+        self.assertIsNone(choose(sensors=sensors(ph=8.5)).pump)  # Critical override.
 
     def test_critical_and_faults_latch_semi_and_stop_circulation(self):
         critical = choose(water_class="Critical", circulation_flow_gpio_level="HIGH")

@@ -445,3 +445,22 @@ This applies to different alert types as well as retries after a modem error.
 An SMS waiting for its turn stays pending while its issue remains active; it is
 not sent if the issue clears first. The gap is measured within the running
 service and resets when the service restarts. The installer sends no test SMS.
+
+# Pi pH 6.86 buffer adjustment
+
+With the pH probe resting in a labeled 6.86 buffer, run:
+
+```bash
+cd ~/VERDEapp
+python3 deploy/calibrate_pi_ph_686.py --check
+python3 deploy/calibrate_pi_ph_686.py --apply
+python3 -m py_compile ~/VERDE-Sensor-Integration/verde_sensor_service.py
+sudo systemctl restart verde.service
+```
+
+The script reads five consecutive, fresh, non-spiking ADS1115 A1 samples. It
+waits for a stable voltage window, backs up the Pi's untracked sensor service,
+and adjusts only the pH intercept. The existing slope is retained. This is a
+single-point offset adjustment; checking the slope requires a second buffer.
+The script never reads hardware directly or sends a test SMS. After restart,
+check the live pH reading while the probe remains in the 6.86 buffer.

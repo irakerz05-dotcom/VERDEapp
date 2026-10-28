@@ -148,17 +148,23 @@ The older GPIO5 digital-threshold installer remains in `deploy/` but does not
 apply to the current analog connection; do not run it.
 A drinking-water sample designated 0.3 estimated NTU by the project is a
 reference assumption, not a certified measurement. The current project response
-uses `0.3 × (A0 reference voltage / live A0 voltage)²`. This assumed nonlinear
+uses `0.3 × (A0 reference voltage / live A0 voltage)^2.4`. This assumed nonlinear
 sensitivity makes lower voltages respond more strongly than the previous inverse
 ratio; it is not DFRobot's calibrated curve. The displayed result is an
 unvalidated project estimate, so its four decimal places do not indicate physical
 accuracy. DFRobot's stated clean-water sensor output (~4.1 ± 0.3 V) differs
 from this project's saved reference (~2.66 V reconstructed before the divider).
-The archived sensor history and real-data pilot were gathered on the older
-1.0-reference conversion and cannot be compared directly with new estimates.
+The 2.4 exponent was chosen to place an observed 0.279 V milk sample above 20
+on this project scale. The milk sample is not a 20 NTU standard. Since a
+Critical classification can create an SMS incident, test liquids can produce
+alerts. Archived sensor history and the real-data pilot were gathered on older
+conversion versions and cannot be compared directly with new estimates.
 Run `deploy/apply_pi_turbidity_response.py --check` before `--apply` to migrate
 the Pi's existing A0 reference without recapturing it. The installer refuses
 to proceed when a critical turbidity safety/SMS threshold is configured.
+For systems already using that squared response, run
+`deploy/apply_pi_turbidity_response_v2.py --check`, then `--apply`; the original
+drinking-water A0 voltage stays unchanged.
 
 Do not connect the browser directly to GPIO or bypass backend safety decisions.
 

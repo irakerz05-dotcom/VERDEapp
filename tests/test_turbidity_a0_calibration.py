@@ -34,7 +34,7 @@ class TurbidityReferenceTests(unittest.TestCase):
         self.assertEqual(record["ads_channel"], "A0")
         self.assertEqual(record["reference_provenance"], "USER_ASSIGNED_UNCERTIFIED")
         self.assertEqual(record["reference_ntu"], 0.3)
-        self.assertEqual(record["conversion_version"], "PROJECT_RELATIVE_SQUARED_V1")
+        self.assertEqual(record["conversion_version"], "PROJECT_RELATIVE_POWER_2_4_V2")
         self.assertAlmostEqual(record["voltage_divider"]["adc_fraction_of_sensor_output"], 2 / 3)
         self.assertAlmostEqual(record["reference_sensor_output_estimate_V"], 0.5762 * 1.5)
 

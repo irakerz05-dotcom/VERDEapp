@@ -48,7 +48,7 @@ def verify_service_source(path=SERVICE_SOURCE, channel="A0"):
         (rf'"turbidity"\s*,\s*AnalogIn\(self\.ads,\s*ADS\.P{channel[-1]}\)', f"{channel} input"),
         (rf'record\.get\("ads_channel"\)\s*!=\s*"{channel}"', f"{channel} record guard"),
         (r'record\.get\("calibration_status"\)\s*!=\s*"CALIBRATED"', "record status guard"),
-        (r'TURBIDITY_REFERENCE_NTU\s*\*\s*\(abs\(reference_voltage\)\s*/\s*abs\(measured_voltage\)\)\s*\*\*\s*2',
+        (r'TURBIDITY_REFERENCE_NTU\s*\*\s*\(abs\(reference_voltage\)\s*/\s*abs\(measured_voltage\)\)\s*\*\*\s*2\.4\b',
          "project-relative NTU equation"),
     )
     for expression, description in checks:
@@ -150,12 +150,12 @@ def record_for(samples, summary, channel="A0"):
         "voltage_statistics": {"sample_count": len(samples), **summary,
                                "samples": samples},
         "calibration_method": f"Median of five distinct cached ADS1115 {channel} samples; no direct hardware reads",
-        "calibration_equation": "Project-estimated NTU = 0.3 * (abs(V_reference) / abs(V_measured))^2",
+        "calibration_equation": "Project-estimated NTU = 0.3 * (abs(V_reference) / abs(V_measured))^2.4",
         "sensor_direction": "Lower voltage gives a larger project NTU estimate",
         "reference_provenance": "USER_ASSIGNED_UNCERTIFIED",
         "calibration_status": "CALIBRATED",
-        "interpretation": "Unvalidated project-relative display estimate; not measured standard NTU. The squared response is an assumed sensitivity, not a DFRobot calibration curve.",
-        "conversion_version": "PROJECT_RELATIVE_SQUARED_V1",
+        "interpretation": "Unvalidated project-relative display estimate; not measured standard NTU. The 2.4-power response was chosen for a milk sample, not a certified 20 NTU standard.",
+        "conversion_version": "PROJECT_RELATIVE_POWER_2_4_V2",
     }
     if channel == "A0":
         ratio = A0_DIVIDER_BOTTOM_OHMS / (A0_DIVIDER_TOP_OHMS + A0_DIVIDER_BOTTOM_OHMS)

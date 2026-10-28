@@ -15,8 +15,10 @@ FULL = "Full Automation Mode"
 SEMI = "Semi-Automation Mode"
 MIX_SECONDS = 60.0
 MAX_SAMPLE_AGE_SECONDS = 65.0
-DOSE_VOLUME_ML = 1.0
-COURSE_LIMIT_ML = {"pump1": 10.0, "pump2": 5.86, "pump3": 3.98}
+ASSUMED_FLOW_ML_PER_SECOND = 0.82
+MAX_RUN_SECONDS = 5.0
+DOSE_VOLUME_ML = ASSUMED_FLOW_ML_PER_SECOND * MAX_RUN_SECONDS
+COURSE_LIMIT_ML = {"pump1": 10.0, "pump2": 5.86, "pump3": 4.1}
 PUMP_BY_ACTION = {
     "nutrient_dosing": "pump1",  # GPIO27
     "ph_up": "pump2",           # GPIO22
@@ -144,14 +146,16 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
             prior_ml = (dosed_ml_by_pump or {}).get(pump) if isinstance(dosed_ml_by_pump, dict) else None
             remaining_ml = (COURSE_LIMIT_ML[pump] - prior_ml
                             if _finite(prior_ml) and prior_ml >= 0 else 0.0)
-            next_ml = min(DOSE_VOLUME_ML, max(0.0, remaining_ml))
             mixed = (last_dose_elapsed_seconds is None
                      or (_finite(last_dose_elapsed_seconds)
                          and last_dose_elapsed_seconds >= MIX_SECONDS))
-            if not mixed or next_ml <= 0 or not _finite(duration) or not 0 < duration <= 5.0:
+            if (not mixed or remaining_ml <= 0 or not _finite(duration)
+                    or not 0 < duration <= MAX_RUN_SECONDS):
                 action = pump = None
             else:
-                seconds = float(duration) * next_ml / DOSE_VOLUME_ML
+                next_ml = min(DOSE_VOLUME_ML, remaining_ml,
+                              float(duration) * ASSUMED_FLOW_ML_PER_SECOND)
+                seconds = next_ml / ASSUMED_FLOW_ML_PER_SECOND
                 dose_ml = next_ml
 
     return Decision(active_mode, latched, reason, circulation,

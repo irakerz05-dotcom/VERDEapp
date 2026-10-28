@@ -6,8 +6,9 @@
   "proposed_course_limits_mL": {
     "pump1_nutrients": 10.0,
     "pump2_ph_up": 5.86,
-    "pump3_ph_down": 3.98,
-    "single_step": 1.0,
+    "pump3_ph_down": 4.1,
+    "single_step": 4.1,
+    "single_step_seconds": 5.0,
     "mixing_wait_seconds": 60
   },
   "pump1": {

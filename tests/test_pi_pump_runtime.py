@@ -46,6 +46,7 @@ def inputs():
     automation = {"selected_mode": pi_pump_decision.FULL,
                   "active_mode": pi_pump_decision.FULL, "override": False,
                   "override_reason": None, "hold_reason": None,
+                  "circulation_stop_required": False,
                   "actuation_enabled": False, "outputs": {}}
     return automation, snapshot, types.SimpleNamespace(value="Suboptimal"), \
         types.SimpleNamespace(status="READY"), {"status": "READY"}
@@ -85,6 +86,31 @@ class RuntimeTests(unittest.TestCase):
         automation["hold_reason"] = "plant classification unavailable"
         runtime.apply(automation, snapshot, water, plant, camera)
         self.assertEqual(calls, [("status",), ("circulation", "run")])
+
+    def test_critical_keeps_circulation_and_holds_automatic_dose(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        gateway = {"armed": True, "circulation": "STOP", "in_progress": False}
+        runtime.command = lambda *args: calls.append(args) or gateway
+        automation, snapshot, water, plant, camera = inputs()
+        automation["override"] = True
+        automation["active_mode"] = pi_pump_decision.SEMI
+        automation["override_reason"] = "ph Critical"
+        result = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertEqual(calls, [("status",), ("circulation", "run")])
+        self.assertFalse(result["actuation_enabled"])
+        self.assertEqual(result["outputs"]["circulation_pump"], "RUN (GPIO24 HIGH)")
+
+    def test_fault_stops_circulation(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        gateway = {"armed": True, "circulation": "RUN", "in_progress": False}
+        runtime.command = lambda *args: calls.append(args) or gateway
+        automation, snapshot, water, plant, camera = inputs()
+        automation["override"] = True
+        automation["circulation_stop_required"] = True
+        runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertEqual(calls, [("status",), ("safe-off",)])
 
 
 if __name__ == "__main__":

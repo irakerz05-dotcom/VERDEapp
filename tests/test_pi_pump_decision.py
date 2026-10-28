@@ -43,7 +43,7 @@ class PumpDecisionTests(unittest.TestCase):
         for flow_level, stop_level in (("LOW", "HIGH"), ("HIGH", "LOW")):
             self.assertEqual(choose(circulation_flow_gpio_level=flow_level).circulation_gpio_level,
                              flow_level)
-            stopped = choose(water_class="Critical", circulation_flow_gpio_level=flow_level)
+            stopped = choose(vision_fault=True, circulation_flow_gpio_level=flow_level)
             self.assertEqual(stopped.circulation_gpio_level, stop_level)
         with self.assertRaises(ValueError):
             choose(circulation_flow_gpio_level="probably HIGH")
@@ -87,10 +87,10 @@ class PumpDecisionTests(unittest.TestCase):
                                  dosed_ml_by_pump={"pump3": 4.1}).pump)
         self.assertIsNone(choose(sensors=sensors(ph=8.5)).pump)  # Critical override.
 
-    def test_critical_and_faults_latch_semi_and_stop_circulation(self):
+    def test_critical_latches_semi_but_only_faults_stop_circulation(self):
         critical = choose(water_class="Critical", circulation_flow_gpio_level="HIGH")
         self.assertEqual((critical.active_mode, critical.circulation, critical.pump),
-                         (SEMI, "STOP", None))
+                         (SEMI, "RUN", None))
         self.assertTrue(critical.override_latched)
         fault = sensors(ph=5.2)
         fault["water_temperature"] = {"value_C": 22, "status": "ERROR: CRC"}
@@ -110,7 +110,7 @@ class PumpDecisionTests(unittest.TestCase):
 
     def test_latched_override_needs_new_farmer_full_request(self):
         held = choose(override_latched=True, circulation_flow_gpio_level="HIGH")
-        self.assertEqual((held.active_mode, held.circulation), (SEMI, "STOP"))
+        self.assertEqual((held.active_mode, held.circulation), (SEMI, "RUN"))
         restored = choose(override_latched=True, request_full=True,
                           circulation_flow_gpio_level="HIGH")
         self.assertEqual((restored.active_mode, restored.circulation), (FULL, "RUN"))
@@ -125,6 +125,12 @@ class PumpDecisionTests(unittest.TestCase):
     def test_stale_snapshot_never_doses(self):
         decision = choose(sensors=sensors(ph=5.2), snapshot_age_seconds=66,
                           circulation_flow_gpio_level="HIGH")
+        self.assertEqual((decision.pump, decision.circulation), (None, "STOP"))
+
+    def test_missing_required_sensor_stops_circulation(self):
+        live = sensors()
+        del live["ph"]
+        decision = choose(sensors=live, circulation_flow_gpio_level="HIGH")
         self.assertEqual((decision.pump, decision.circulation), (None, "STOP"))
 
 

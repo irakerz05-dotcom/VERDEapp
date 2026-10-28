@@ -79,11 +79,19 @@ class PumpRuntime:
                 output["hardware_status"] = "DISARMED — CIRCULATION CONFIGURATION PENDING"
                 output["outputs"] = {name: "OFF / DISARMED" for name in OUTPUTS}
                 return output
-            if automation.get("override"):
+            if automation.get("circulation_stop_required", True):
                 self.command("safe-off")
                 output["actuation_enabled"] = False
-                output["hardware_status"] = "SAFETY OVERRIDE — PUMPS STOPPED"
+                output["hardware_status"] = "FAULT OVERRIDE — PUMPS STOPPED"
                 output["outputs"] = {name: "OFF" for name in OUTPUTS}
+                return output
+            if automation.get("override"):
+                if gateway.get("circulation") != "RUN":
+                    self.command("circulation", "run")
+                output["actuation_enabled"] = False
+                output["hardware_status"] = "CRITICAL — SEMI-AUTOMATION; DOSING HELD"
+                output["outputs"] = {name: "OFF" for name in OUTPUTS}
+                output["outputs"]["circulation_pump"] = "RUN (GPIO24 HIGH)"
                 return output
             sensors = live_snapshot.get("sensors", {}) if isinstance(live_snapshot, dict) else {}
             decision = decide(

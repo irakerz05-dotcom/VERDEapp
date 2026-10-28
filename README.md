@@ -601,7 +601,13 @@ On restart, the service requests dosing pins OFF and circulation STOP, then
 reports a Semi-Automation safety override while the gateway is disarmed.
 Armed operation uses the integrated live sensor snapshot, respects the
 60-second mixing wait and root-owned 24-hour volume ledger, and runs
-circulation at GPIO24 HIGH in both modes unless a Critical/fault override
-requires LOW/STOP. Temporary unclassified vision holds dosing without
+circulation at GPIO24 HIGH in both modes. A Faulty Sensor, Faulty Vision,
+stale acquisition, or system fault requires GPIO24 LOW/STOP; a Critical
+reading alone selects Semi-Automation and holds automatic dosing while
+circulation keeps mixing. Temporary unclassified vision holds dosing without
 stopping circulation. Semi-Automation dose confirmation remains blocked until
 its separate confirmation endpoint is integrated and tested.
+
+`deploy/apply_pi_circulation_policy.py` updates those three policy modules in
+one guarded transaction. It accepts only the reviewed installed module hashes
+and backs up each file before editing. The gateway remains disarmed.

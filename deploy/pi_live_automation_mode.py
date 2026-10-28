@@ -58,33 +58,49 @@ def evaluate_live(selected_mode, snapshot, water, plant, camera, limits,
         sensors = {}
     age = _age_seconds(snapshot, now) if isinstance(snapshot, dict) else math.inf
     faults = []
+    circulation_stop_reasons = []
     holds = []
     if not 0 <= age <= MAX_SAMPLE_AGE_SECONDS:
         faults.append("Integrated sensor sample is stale")
+        circulation_stop_reasons.append("Integrated sensor sample is stale")
     for name, field in REQUIRED.items():
         sensor = sensors.get(name)
         if not isinstance(sensor, dict):
             holds.append(name + " reading missing")
+            faults.append(name + " unavailable")
+            circulation_stop_reasons.append(name + " unavailable")
             continue
         status = str(sensor.get("status") or "")
         failures = sensor.get("consecutive_failures")
         persistent = (type(failures) is int and failures >= 2)
-        if (status.startswith(("ERROR", "FAULT"))
+        if (status.startswith(("ERROR", "FAULT", "UNAVAILABLE"))
                 or (sensor.get("valid") is False and persistent)):
             faults.append(name + " fault")
+            circulation_stop_reasons.append(name + " fault")
         ready = (status.startswith("OK") or status == "CALIBRATED")
         if (not ready or not _finite(sensor.get(field)) or sensor.get("retained")
                 or sensor.get("stale") or sensor.get("valid") is False):
             holds.append(name + " reading not fresh")
         if str(sensor.get("classification") or "").upper() == "CRITICAL":
             faults.append(name + " Critical")
+        value = sensor.get(field)
+        numeric_critical = (
+            (name == "ph" and _finite(value) and (value < 4.5 or value > 8.0))
+            or (name == "ec" and _finite(value) and (value < 0.5 or value > 4.0))
+            or (name == "water_temperature" and _finite(value) and value > 35.0)
+            or (name == "turbidity" and _finite(value) and value >= 20.0)
+        )
+        if numeric_critical and name + " Critical" not in faults:
+            faults.append(name + " Critical")
     if _value(water) == "Critical":
         faults.append("water quality Critical")
     if _status(plant) == "FAULT / ERROR" or (isinstance(camera, dict)
                                               and camera.get("status") == "FAULT / ERROR"):
         faults.append("Faulty Vision")
+        circulation_stop_reasons.append("Faulty Vision")
     if extra_fault:
         faults.append("system fault")
+        circulation_stop_reasons.append("system fault")
     if _value(water) not in ("Optimal", "Suboptimal", "Critical"):
         holds.append("water classification unavailable")
     if _value(plant) not in ("Healthy", "Yellowing", "Wilting", "Harvest-Ready"):
@@ -113,6 +129,7 @@ def evaluate_live(selected_mode, snapshot, water, plant, camera, limits,
         "active_mode": active,
         "override": override,
         "override_reason": "; ".join(faults) if faults else None,
+        "circulation_stop_required": bool(circulation_stop_reasons),
         "hold_reason": "; ".join(holds) if holds else None,
         "recommendations": recommendations,
         "confirmation_required": active == SEMI,

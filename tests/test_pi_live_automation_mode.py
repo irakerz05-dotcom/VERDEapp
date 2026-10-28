@@ -44,6 +44,7 @@ class LiveModeTests(unittest.TestCase):
         result = decide()
         self.assertEqual(result["active_mode"], FULL)
         self.assertFalse(result["override"])
+        self.assertFalse(result["circulation_stop_required"])
         self.assertFalse(result["actuation_enabled"])
         self.assertEqual(result["recommendations"], [])
 
@@ -51,7 +52,9 @@ class LiveModeTests(unittest.TestCase):
         live = snapshot()
         live["sensors"]["ph"]["classification"] = "CRITICAL"
         self.assertEqual(decide(snapshot=live)["active_mode"], SEMI)
+        self.assertFalse(decide(snapshot=live)["circulation_stop_required"])
         self.assertTrue(decide(camera={"status": "FAULT / ERROR"})["override"])
+        self.assertTrue(decide(camera={"status": "FAULT / ERROR"})["circulation_stop_required"])
         self.assertTrue(decide(water=SimpleNamespace(value="Critical", status="EXPERIMENTAL"))["override"])
 
     def test_recovering_temperature_holds_without_fault_override(self):
@@ -64,17 +67,33 @@ class LiveModeTests(unittest.TestCase):
         live["sensors"]["water_temperature"]["consecutive_failures"] = 2
         live["sensors"]["water_temperature"]["valid"] = False
         self.assertTrue(decide(snapshot=live)["override"])
+        self.assertTrue(decide(snapshot=live)["circulation_stop_required"])
 
     def test_missing_plant_classification_is_hold_not_fault(self):
         result = decide(plant=SimpleNamespace(value=None, status="NO DETECTION"))
         self.assertFalse(result["override"])
         self.assertIn("plant classification unavailable", result["hold_reason"])
 
+    def test_missing_required_sensor_stops_circulation(self):
+        live = snapshot()
+        del live["sensors"]["ph"]
+        result = decide(snapshot=live)
+        self.assertTrue(result["override"])
+        self.assertTrue(result["circulation_stop_required"])
+
+    def test_numeric_critical_overrides_even_if_classification_is_stale(self):
+        live = snapshot()
+        live["sensors"]["ph"]["value"] = 8.5
+        result = decide(snapshot=live)
+        self.assertTrue(result["override"])
+        self.assertFalse(result["circulation_stop_required"])
+
     def test_stale_snapshot_and_legacy_placeholder_never_enable_pumps(self):
         live = snapshot()
         live["timestamp"] = "2026-10-29T03:40:00+00:00"
         result = decide(snapshot=live)
         self.assertTrue(result["override"])
+        self.assertTrue(result["circulation_stop_required"])
         self.assertFalse(result["actuation_enabled"])
         self.assertTrue(all("OFF" in value for value in result["outputs"].values()))
 

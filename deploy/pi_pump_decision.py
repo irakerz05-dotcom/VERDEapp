@@ -56,10 +56,10 @@ def _sensor_ready(sensor, value_field):
 
 def _sensor_fault(sensor):
     if not isinstance(sensor, dict):
-        return False
+        return True
     status = str(sensor.get("status") or "").upper()
     failures = sensor.get("consecutive_failures")
-    return (status.startswith(("ERROR", "FAULT"))
+    return (status.startswith(("ERROR", "FAULT", "UNAVAILABLE"))
             or (sensor.get("valid") is False and isinstance(failures, int)
                 and not isinstance(failures, bool) and failures >= 2))
 
@@ -119,8 +119,9 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
                               if unready else None)
     # The NC contact may reverse the load behavior relative to a NO contact.
     # GPIO24 is not driven until its actual flow level is physically verified.
+    stop_for_fault = bool(stale or faulty or camera_fault or vision_fault)
     circulation = ("BLOCKED: polarity unverified" if circulation_flow_gpio_level is None
-                   else "STOP" if latched else "RUN")
+                   else "STOP" if stop_for_fault else "RUN")
     circulation_gpio_level = (None if circulation_flow_gpio_level is None else
                               circulation_flow_gpio_level if circulation == "RUN" else
                               "HIGH" if circulation_flow_gpio_level == "LOW" else "LOW")

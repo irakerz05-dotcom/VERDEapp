@@ -501,3 +501,26 @@ The installer backs up the sensor service, writes a calibration provenance
 record in the Pi home directory, and changes only its pH slope and intercept.
 It does not send an SMS. After restarting, compare VERDE with the commercial
 meter in the same solution before using pH values for data gathering.
+
+# Pi EC two-point tap-water adjustment
+
+The saved post-hardware-fix A2 reference is 0.553125 V at 1.413 mS/cm
+(25 °C). A separate EC meter measured the current tap-water sample at
+0.138 mS/cm. While the VERDE EC probe remains in that tap-water sample, run:
+
+```bash
+cd ~/VERDEapp
+python3 deploy/calibrate_pi_ec_tap_two_point.py --check
+python3 deploy/calibrate_pi_ec_tap_two_point.py --apply
+python3 -m py_compile ~/VERDE-Sensor-Integration/verde_sensor_service.py
+sudo systemctl restart verde.service
+```
+
+The installer captures five fresh, stable A2 acquisitions, fits a straight
+line through the two references, preserves the V2 record, backs up the live
+sensor service, and stores a separate V3 record in the Pi home directory.
+Below the lower point the linear estimate is clamped to zero; above the
+higher point it is extrapolated. The tap-water meter temperature was not
+recorded, and no temperature compensation was derived. Older EC History and
+the real-data RF pilot used a different conversion, so their values are not
+directly comparable. A Critical EC condition may send SMS after the restart.

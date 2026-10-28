@@ -1,0 +1,136 @@
+"""Pure VERDE pump decisions. This module never opens GPIO or starts a pump.
+
+The live service must enforce these decisions again immediately before actuation.
+Physical output remains unavailable until a privileged controller, dose calibration,
+and circulation polarity have been verified on the Pi.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+
+FULL = "Full Automation Mode"
+SEMI = "Semi-Automation Mode"
+MIX_SECONDS = 60.0
+MAX_SAMPLE_AGE_SECONDS = 65.0
+PUMP_BY_ACTION = {
+    "nutrient_dosing": "pump1",  # GPIO27
+    "ph_up": "pump2",           # GPIO22
+    "ph_down": "pump3",         # GPIO23
+}
+
+
+@dataclass(frozen=True)
+class Decision:
+    active_mode: str
+    override_latched: bool
+    reason: str | None
+    circulation: str
+    dose_action: str | None
+    pump: str | None
+    dose_seconds: float | None
+
+
+def _finite(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _sensor_ready(sensor, value_field):
+    if not isinstance(sensor, dict) or not _finite(sensor.get(value_field)):
+        return False
+    status = str(sensor.get("status") or "")
+    if sensor.get("retained") or sensor.get("stale"):
+        return False
+    if sensor.get("valid") is False:
+        return False
+    return status.startswith("OK") or status == "CALIBRATED"
+
+
+def _sensor_fault(sensor):
+    if not isinstance(sensor, dict):
+        return False
+    status = str(sensor.get("status") or "").upper()
+    failures = sensor.get("consecutive_failures")
+    return (status.startswith(("ERROR", "FAULT"))
+            or (sensor.get("valid") is False and isinstance(failures, int)
+                and not isinstance(failures, bool) and failures >= 2))
+
+
+def decide(*, selected_mode, override_latched, request_full, sensors,
+           snapshot_age_seconds, water_class, camera_fault, vision_fault,
+           last_dose_elapsed_seconds, calibrated_dose_seconds,
+           circulation_polarity_verified):
+    """Return a proposed action; no state or hardware is changed.
+
+    ``request_full`` represents a fresh farmer action after an override. Merely
+    retaining an earlier Full selection must never clear a latched override.
+    """
+    if selected_mode not in (FULL, SEMI):
+        raise ValueError("Unknown operating mode")
+    if not isinstance(sensors, dict):
+        sensors = {}
+    required = {
+        "ph": ("value",),
+        "ec": ("value_mScm",),
+        "water_temperature": ("value_C",),
+        "turbidity": ("value_ntu",),
+    }
+    unready = [name for name, (field,) in required.items()
+               if not _sensor_ready(sensors.get(name), field)]
+    faulty = [name for name in required if _sensor_fault(sensors.get(name))]
+    stale = (not _finite(snapshot_age_seconds) or snapshot_age_seconds < 0
+             or snapshot_age_seconds > MAX_SAMPLE_AGE_SECONDS)
+    critical = [name for name in required
+                if str((sensors.get(name) or {}).get("classification") or "").upper() == "CRITICAL"]
+    if water_class == "Critical":
+        critical.append("water quality")
+    fault_reason = None
+    if stale:
+        fault_reason = "Sensor acquisition is stale"
+    elif faulty:
+        fault_reason = "Faulty Sensor: " + ", ".join(faulty)
+    elif camera_fault or vision_fault:
+        fault_reason = "Faulty Vision"
+    elif critical:
+        fault_reason = "Critical condition: " + ", ".join(critical)
+
+    latched = bool(override_latched or fault_reason)
+    if (not fault_reason and not unready and water_class in ("Optimal", "Suboptimal")
+            and request_full and selected_mode == FULL):
+        latched = False
+    active_mode = SEMI if latched else selected_mode
+    reason = fault_reason or ("Waiting for fresh sensor readings: " + ", ".join(unready)
+                              if unready else None)
+    # GPIO24 is not driven until LOW=flow and HIGH=stop have been verified
+    # against actual water movement, independently of relay LEDs.
+    circulation = ("BLOCKED: polarity unverified" if not circulation_polarity_verified
+                   else "STOP" if latched else "RUN")
+
+    action = None
+    pump = None
+    seconds = None
+    if (active_mode == FULL and reason is None and water_class in ("Optimal", "Suboptimal")
+            and not camera_fault and not vision_fault):
+        ph = sensors["ph"]["value"]
+        ec = sensors["ec"]["value_mScm"]
+        if ph < 5.5:
+            action = "ph_up"
+        elif ph > 6.5:
+            action = "ph_down"
+        elif ec < 1.2:
+            action = "nutrient_dosing"
+        # High EC has no deterministic correction pump.
+        if action:
+            pump = PUMP_BY_ACTION[action]
+            duration = calibrated_dose_seconds.get(pump) if isinstance(calibrated_dose_seconds, dict) else None
+            mixed = (last_dose_elapsed_seconds is None
+                     or (_finite(last_dose_elapsed_seconds)
+                         and last_dose_elapsed_seconds >= MIX_SECONDS))
+            if not mixed or not _finite(duration) or not 0 < duration <= 5.0:
+                action = pump = None
+            else:
+                seconds = float(duration)
+
+    return Decision(active_mode, latched, reason, circulation, action, pump, seconds)

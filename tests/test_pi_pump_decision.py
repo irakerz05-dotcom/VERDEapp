@@ -23,7 +23,7 @@ def choose(**overrides):
                      camera_fault=False, vision_fault=False,
                      last_dose_elapsed_seconds=None,
                      calibrated_dose_seconds={"pump1": 1, "pump2": 1, "pump3": 1},
-                     circulation_polarity_verified=False)
+                     circulation_flow_gpio_level=None)
     arguments.update(overrides)
     return decide(**arguments)
 
@@ -36,6 +36,16 @@ class PumpDecisionTests(unittest.TestCase):
         self.assertEqual(choose(sensors=sensors(ec=2.1)).pump, None)
         self.assertEqual(choose(sensors=sensors(ph=5.2)).circulation,
                          "BLOCKED: polarity unverified")
+        self.assertIsNone(choose().circulation_gpio_level)
+
+    def test_circulation_gpio_level_uses_observed_flow_polarity(self):
+        for flow_level, stop_level in (("LOW", "HIGH"), ("HIGH", "LOW")):
+            self.assertEqual(choose(circulation_flow_gpio_level=flow_level).circulation_gpio_level,
+                             flow_level)
+            stopped = choose(water_class="Critical", circulation_flow_gpio_level=flow_level)
+            self.assertEqual(stopped.circulation_gpio_level, stop_level)
+        with self.assertRaises(ValueError):
+            choose(circulation_flow_gpio_level="probably HIGH")
 
     def test_one_minute_mixing_and_measured_duration_gate(self):
         self.assertIsNone(choose(sensors=sensors(ph=5.2),
@@ -48,34 +58,34 @@ class PumpDecisionTests(unittest.TestCase):
                                  calibrated_dose_seconds={"pump2": 5.1}).pump)
 
     def test_critical_and_faults_latch_semi_and_stop_circulation(self):
-        critical = choose(water_class="Critical", circulation_polarity_verified=True)
+        critical = choose(water_class="Critical", circulation_flow_gpio_level="HIGH")
         self.assertEqual((critical.active_mode, critical.circulation, critical.pump),
                          (SEMI, "STOP", None))
         self.assertTrue(critical.override_latched)
         fault = sensors(ph=5.2)
         fault["water_temperature"] = {"value_C": 22, "status": "ERROR: CRC"}
-        self.assertEqual(choose(sensors=fault, circulation_polarity_verified=True).circulation,
+        self.assertEqual(choose(sensors=fault, circulation_flow_gpio_level="HIGH").circulation,
                          "STOP")
-        self.assertEqual(choose(vision_fault=True, circulation_polarity_verified=True).circulation,
+        self.assertEqual(choose(vision_fault=True, circulation_flow_gpio_level="HIGH").circulation,
                          "STOP")
 
     def test_recovery_holds_dosing_without_treating_humidity_as_fault(self):
         recovering = sensors(ph=5.2)
         recovering["water_temperature"] = {"value_C": None, "status": "RECOVERING"}
-        decision = choose(sensors=recovering, circulation_polarity_verified=True)
+        decision = choose(sensors=recovering, circulation_flow_gpio_level="HIGH")
         self.assertIsNone(decision.pump)
         self.assertEqual(decision.circulation, "RUN")
         self.assertFalse(decision.override_latched)
         self.assertEqual(choose(sensors=sensors(ph=5.2)).pump, "pump2")
 
     def test_latched_override_needs_new_farmer_full_request(self):
-        held = choose(override_latched=True, circulation_polarity_verified=True)
+        held = choose(override_latched=True, circulation_flow_gpio_level="HIGH")
         self.assertEqual((held.active_mode, held.circulation), (SEMI, "STOP"))
         restored = choose(override_latched=True, request_full=True,
-                          circulation_polarity_verified=True)
+                          circulation_flow_gpio_level="HIGH")
         self.assertEqual((restored.active_mode, restored.circulation), (FULL, "RUN"))
         still_faulty = choose(override_latched=True, request_full=True,
-                              vision_fault=True, circulation_polarity_verified=True)
+                              vision_fault=True, circulation_flow_gpio_level="HIGH")
         self.assertEqual(still_faulty.active_mode, SEMI)
         recovering = sensors()
         recovering["water_temperature"] = {"value_C": None, "status": "RECOVERING"}
@@ -84,7 +94,7 @@ class PumpDecisionTests(unittest.TestCase):
 
     def test_stale_snapshot_never_doses(self):
         decision = choose(sensors=sensors(ph=5.2), snapshot_age_seconds=66,
-                          circulation_polarity_verified=True)
+                          circulation_flow_gpio_level="HIGH")
         self.assertEqual((decision.pump, decision.circulation), (None, "STOP"))
 
 

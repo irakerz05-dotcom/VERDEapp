@@ -28,6 +28,7 @@ class Decision:
     override_latched: bool
     reason: str | None
     circulation: str
+    circulation_gpio_level: str | None
     dose_action: str | None
     pump: str | None
     dose_seconds: float | None
@@ -61,7 +62,7 @@ def _sensor_fault(sensor):
 def decide(*, selected_mode, override_latched, request_full, sensors,
            snapshot_age_seconds, water_class, camera_fault, vision_fault,
            last_dose_elapsed_seconds, calibrated_dose_seconds,
-           circulation_polarity_verified):
+           circulation_flow_gpio_level):
     """Return a proposed action; no state or hardware is changed.
 
     ``request_full`` represents a fresh farmer action after an override. Merely
@@ -69,6 +70,8 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
     """
     if selected_mode not in (FULL, SEMI):
         raise ValueError("Unknown operating mode")
+    if circulation_flow_gpio_level not in (None, "LOW", "HIGH"):
+        raise ValueError("Circulation flow GPIO level must be LOW, HIGH, or unverified")
     if not isinstance(sensors, dict):
         sensors = {}
     required = {
@@ -103,10 +106,13 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
     active_mode = SEMI if latched else selected_mode
     reason = fault_reason or ("Waiting for fresh sensor readings: " + ", ".join(unready)
                               if unready else None)
-    # GPIO24 is not driven until LOW=flow and HIGH=stop have been verified
-    # against actual water movement, independently of relay LEDs.
-    circulation = ("BLOCKED: polarity unverified" if not circulation_polarity_verified
+    # The NC contact may reverse the load behavior relative to a NO contact.
+    # GPIO24 is not driven until its actual flow level is physically verified.
+    circulation = ("BLOCKED: polarity unverified" if circulation_flow_gpio_level is None
                    else "STOP" if latched else "RUN")
+    circulation_gpio_level = (None if circulation_flow_gpio_level is None else
+                              circulation_flow_gpio_level if circulation == "RUN" else
+                              "HIGH" if circulation_flow_gpio_level == "LOW" else "LOW")
 
     action = None
     pump = None
@@ -133,4 +139,5 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
             else:
                 seconds = float(duration)
 
-    return Decision(active_mode, latched, reason, circulation, action, pump, seconds)
+    return Decision(active_mode, latched, reason, circulation,
+                    circulation_gpio_level, action, pump, seconds)

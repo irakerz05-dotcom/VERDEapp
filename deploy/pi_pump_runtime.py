@@ -180,9 +180,15 @@ class PumpRuntime:
             output["outputs"]["circulation_pump"] = "RUN (GPIO24 HIGH)"
             if (output["active_mode"] == FULL and not output.get("hold_reason")
                     and decision.pump is not None):
-                self.command("dose", decision.pump, f"{decision.dose_seconds:.8f}")
+                result = self.command("dose", decision.pump, f"{decision.dose_seconds:.8f}")
                 output["outputs"][decision.dose_action] = (
                     f"DOSED {decision.dose_ml:.2f} mL / {decision.dose_seconds:.2f} s")
+                output["dose_event"] = {
+                    "mode": FULL, "pump": decision.pump, "action": decision.dose_action,
+                    "requested_seconds": decision.dose_seconds,
+                    "estimated_ml": result.get("estimated_ml", decision.dose_ml),
+                    "sensor_timestamp": live_snapshot.get("timestamp") if isinstance(live_snapshot, dict) else None,
+                }
             return output
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
             stopped = self.all_off(str(exc))

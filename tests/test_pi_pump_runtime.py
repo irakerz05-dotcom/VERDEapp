@@ -75,6 +75,8 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(calls[1], ("circulation", "run"))
         self.assertEqual(calls[2], ("dose", "pump2", "4.50000000"))
         self.assertTrue(result["actuation_enabled"])
+        self.assertEqual(result["dose_event"]["pump"], "pump2")
+        self.assertEqual(result["dose_event"]["requested_seconds"], 4.5)
 
     def test_saved_volume_shortens_the_requested_dose(self):
         module = load_runtime()

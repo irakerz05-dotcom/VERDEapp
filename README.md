@@ -634,6 +634,20 @@ the backend installer verifies the reviewed gateway, disarmed state, and
 source hashes before writing. Circulation remains stopped until a person
 physically confirms flow with the revised gateway's interactive `arm` command.
 
+For the paper's pH dosing objectives, `deploy/apply_pi_ph_objective_logging.py`
+adds pH 5.5–6.5 and EC 1.2–1.8 recommendation fallbacks when local limits are
+null, matching the existing automatic decision thresholds. After a successful
+Full-Automation dose, it records a structured `actuator` event in the system
+database with pump, action, requested duration, estimated volume, and sensor
+sample timestamp. A failed event write selects Semi-Automation and requests
+all pumps OFF. The guarded installer backs up changed files and requires the
+gateway to be disarmed. Critical readings still override to Semi-Automation;
+Objective 6's automatic pH-Up test therefore uses 4.5 ≤ pH < 5.5, and
+Objective 7's automatic pH-Down test uses 6.5 < pH ≤ 8.0, with other required
+inputs noncritical and fresh. The actual motor duration and delivered volume
+must be observed separately from the software's requested duration and
+estimated volume.
+
 `deploy/apply_pi_pump_dose_settings.py` adds per-pump requested volumes to the
 dashboard Settings page. Pump 1 is nutrients, Pump 2 is pH Up, and Pump 3 is
 pH Down. In Semi-Automation, the farmer may save a separate target above zero

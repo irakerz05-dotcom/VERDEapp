@@ -88,6 +88,19 @@ class LiveModeTests(unittest.TestCase):
         self.assertTrue(result["override"])
         self.assertFalse(result["circulation_stop_required"])
 
+    def test_paper_ph_recommendations_when_local_limits_are_null(self):
+        low = snapshot()
+        low["sensors"]["ph"].update(value=5.2, classification="SUBOPTIMAL")
+        result = decide(snapshot=low, limits=None,
+                        water=SimpleNamespace(status="EXPERIMENTAL", value="Suboptimal"))
+        self.assertEqual(result["active_mode"], FULL)
+        self.assertIn("pH-Up dosing", result["recommendations"])
+        high = snapshot()
+        high["sensors"]["ph"].update(value=7.2, classification="SUBOPTIMAL")
+        result = decide(snapshot=high, limits=None,
+                        water=SimpleNamespace(status="EXPERIMENTAL", value="Suboptimal"))
+        self.assertIn("pH-Down dosing", result["recommendations"])
+
     def test_stale_snapshot_and_legacy_placeholder_never_enable_pumps(self):
         live = snapshot()
         live["timestamp"] = "2026-10-29T03:40:00+00:00"

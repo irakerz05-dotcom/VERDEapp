@@ -21,6 +21,8 @@ REQUIRED = {
     "turbidity": "value_ntu",
 }
 MAX_SAMPLE_AGE_SECONDS = 65
+PAPER_PH_OPTIMAL = (5.5, 6.5)
+PAPER_EC_OPTIMAL = (1.2, 1.8)
 
 
 def _finite(value):
@@ -112,6 +114,8 @@ def evaluate_live(selected_mode, snapshot, water, plant, camera, limits,
     recommendations = []
     if "ph reading not fresh" not in holds and _finite(ph.get("value")):
         bounds = limits.get("ph_optimal") if isinstance(limits, dict) else None
+        if bounds is None:
+            bounds = PAPER_PH_OPTIMAL
         if isinstance(bounds, (tuple, list)) and len(bounds) == 2:
             if ph["value"] < bounds[0]:
                 recommendations.append("pH-Up dosing")
@@ -119,6 +123,8 @@ def evaluate_live(selected_mode, snapshot, water, plant, camera, limits,
                 recommendations.append("pH-Down dosing")
     if "ec reading not fresh" not in holds and _finite(ec.get("value_mScm")):
         bounds = limits.get("ec_optimal") if isinstance(limits, dict) else None
+        if bounds is None:
+            bounds = PAPER_EC_OPTIMAL
         if isinstance(bounds, (tuple, list)) and len(bounds) == 2:
             if ec["value_mScm"] < bounds[0]:
                 recommendations.append("EC nutrient dosing")

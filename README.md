@@ -188,31 +188,24 @@ should appear after the next sensor acquisition (normally about 30 seconds).
 
 ## NFT planting records
 
-The Plants page has 10 fixed positions: top NFT row Plant 1–5 from right to
-left, bottom NFT row Plant 6–10 from right to left. Select a position on the
-camera image or in the slot grid to enter a planting date. The Pi stores dates
-in its existing SQLite database and calculates the days growing. The 10-slot
-layout starts with blank dates in a new table; earlier 12-slot records remain
-in the original table. Swap moves
-two saved dates when plants are physically moved; erase clears a date for a
-replacement plant. Camera detection boxes do not establish plant identity,
-and planting age does not automatically change the experimental AI result.
+The Plants page has six fixed positions, numbered left to right: P1–P3 in
+the top NFT row and P4–P6 in the bottom row. The camera overlay, planting
+record grid, and descriptive sensor-vision fusion use that same layout.
+Select a position to enter a planting date. The Pi calculates days growing;
+swap moves two saved dates, and erase clears a date for a replacement plant.
+Camera detection boxes do not establish plant identity, and planting age does
+not automatically change the experimental AI result.
 
-On the Pi, fetch `feature/planting-slots` in VERDE-Software and pull this PWA
-branch. Then run `python3 deploy/apply_pi_plant_slots.py --check` followed by
-`python3 deploy/apply_pi_plant_slots.py --apply` from `~/VERDEapp`.
-The installer backs up the existing backend web module. Restart
-`verde.service` at a safe time because its restart can briefly set actuators
-SAFE/OFF and may reopen SMS incidents. Afterward, check
-`http://127.0.0.1:8000/api/plant-slots` on the Pi.
-
-For the 10-slot layout on an already updated Pi, run
-`python3 deploy/apply_pi_ten_plant_slots.py --check` and then `--apply`.
-Run `python3 deploy/apply_pi_ten_fusion.py --check` and then `--apply` to
-expose one descriptive Table 3 confidence result per fixed position using
-the Water Quality prototype and fresh YOLO detections. Both installers make
-backups and leave the service running until a safe restart. The new date
-table is blank; the original 12-slot date table is retained in SQLite.
+The six-slot update uses the existing `plant_slots_v2` SQLite table and keeps
+any saved P1–P6 dates. Earlier P7–P10 rows remain in SQLite for audit but are
+neither shown nor editable. Camera detections are assigned to fixed thirds
+of each image row; missing detections do not shift adjacent slot numbers.
+After the Pi reconnects, pull this branch and run
+`python3 deploy/apply_pi_six_plant_slots.py --check` followed by `--apply`.
+The installer validates the reviewed ten-slot modules, backs them up, and
+does not control GPIO. Restart `verde.service` to load the two new modules,
+then verify six records at `/api/plant-slots` and six entries in
+`/api/status` under `fusion_by_slot`.
 
 ## Experimental water-quality Random Forest
 

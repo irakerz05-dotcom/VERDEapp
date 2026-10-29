@@ -13,7 +13,7 @@ import {
 } from "../js/services/verde-api.js";
 
 test("per-plant fusion keeps fixed slots and invalidates old results when disconnected", () => {
-  const rows = Array.from({ length: 10 }, (_, index) => ({
+  const rows = Array.from({ length: 6 }, (_, index) => ({
     slot: index + 1,
     sensor_status: "Optimal",
     plant_condition: index === 0 ? "Healthy" : index === 5 ? "Yellowing" : null,
@@ -26,8 +26,9 @@ test("per-plant fusion keeps fixed slots and invalidates old results when discon
   assert.equal(normalized[0].confidence, "High");
   assert.equal(normalized[5].slot, 6);
   assert.equal(normalized[5].confidence, "Medium");
-  assert.equal(normalized[9].confidence, null);
-  assert.equal(normalizeFusionBySlot([...rows.slice(0, 9), rows[0]]), null);
+  assert.equal(normalized.length, 6);
+  assert.equal(normalizeFusionBySlot([...rows.slice(0, 5), rows[0]]), null);
+  assert.equal(normalizeFusionBySlot(Array.from({ length: 10 }, (_, index) => ({ slot: index + 1 }))), null);
   const stale = markSnapshotStale({ online: true, sensors: [], fusionBySlot: normalized }, "Offline");
   assert.equal(stale.fusionBySlot[0].confidence, null);
   assert.equal(stale.fusionBySlot[0].status, "Stale");
@@ -610,17 +611,17 @@ test("mock SMS settings are separate from the live modem", async () => {
   assert.equal((await api.getSmsSettings()).modem_configured, false);
 });
 
-test("plant slots normalize ten fixed positions and reject the archived twelve-slot API", () => {
-  const records = Array.from({ length: 10 }, (_, index) => ({
+test("plant slots normalize six fixed positions and reject the former ten-slot API", () => {
+  const records = Array.from({ length: 6 }, (_, index) => ({
     slot: index + 1, planted_on: index === 0 ? "2026-10-01" : null,
     days_growing: index === 0 ? 25 : null
   }));
-  const slots = normalizePlantSlots({ as_of: "2026-10-26", slot_count: 10, slots: records });
+  const slots = normalizePlantSlots({ as_of: "2026-10-26", slot_count: 6, slots: records });
   assert.equal(slots.supported, true);
-  assert.equal(slots.slots.length, 10);
+  assert.equal(slots.slots.length, 6);
   assert.deepEqual(slots.slots[0], { slot: 1, plantedOn: "2026-10-01", daysGrowing: 25 });
   assert.deepEqual(slots.slots[5], { slot: 6, plantedOn: null, daysGrowing: null });
-  assert.equal(normalizePlantSlots({ slots: Array.from({ length: 12 }, (_, index) => ({ slot: index + 1 })) }).supported, false);
+  assert.equal(normalizePlantSlots({ slot_count: 10, slots: Array.from({ length: 10 }, (_, index) => ({ slot: index + 1 })) }).supported, false);
 });
 
 test("plant slot updates use the authenticated backend", async () => {
@@ -628,13 +629,13 @@ test("plant slot updates use the authenticated backend", async () => {
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url, options });
     const payload = url === "/api/session" ? { token: "session-token" }
-      : { as_of: "2026-10-26", slot_count: 10,
-        slots: Array.from({ length: 10 }, (_, index) => ({ slot: index + 1,
+      : { as_of: "2026-10-26", slot_count: 6,
+        slots: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1,
           planted_on: index === 0 ? "2026-10-01" : null, days_growing: index === 0 ? 25 : null })) };
     return { ok: true, status: 200, json: async () => payload };
   };
   const api = new VerdeApi({ fetchImpl });
-  assert.equal((await api.getPlantSlots()).slots.length, 10);
+  assert.equal((await api.getPlantSlots()).slots.length, 6);
   await api.updatePlantSlots({ operation: "set", slot: 1, planted_on: "2026-10-01" });
   assert.deepEqual(calls.map(({ url }) => url), ["/api/plant-slots", "/api/session", "/api/plant-slots"]);
   assert.equal(calls[2].options.headers["X-VERDE-Token"], "session-token");

@@ -456,7 +456,8 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
         ? state.automation.recommendations : [],
       confirmationAvailable: state.automation.confirmation_available === true,
       hardwareStatus: state.automation.hardware_status || "Unavailable",
-      actuationEnabled: state.automation.actuation_enabled === true
+      actuationEnabled: state.automation.actuation_enabled === true,
+      doseSettings: state.automation.dose_settings || null
     },
     updatedAt: liveSensors?.timestamp ?? sensorHealth?.timestamp ?? state.timestamp,
     systemStatus: sensorHealth?.status ?? liveSensors?.system?.overall_status ?? state.system_status ?? "UNAVAILABLE",
@@ -794,6 +795,24 @@ export class VerdeApi {
     }
   }
 
+  async updatePumpDoseSettings(volumes) {
+    const post = async (refreshToken = false) => this.request("/api/pump/dose-settings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-VERDE-Token": await this.sessionToken(refreshToken)
+      },
+      body: JSON.stringify({ volumes_ml: volumes })
+    });
+    try {
+      return await post(false);
+    } catch (error) {
+      if (error.status !== 403) throw error;
+      this.token = null;
+      return post(true);
+    }
+  }
+
   async acknowledgeIssue(issueKey) {
     if (typeof issueKey !== "string" || !issueKey) throw new Error("A valid incident is required.");
     const post = async (refreshToken = false) => this.request("/api/incidents/acknowledge", {
@@ -820,6 +839,7 @@ export class MockVerdeApi {
     this.shouldFail = Boolean(shouldFail);
     this.online = Boolean(online);
     this.mode = "Full Automation";
+    this.pumpVolumes = { pump1: 3.69, pump2: 3.69, pump3: 3.69 };
     this.smsSettings = { sms_enabled: false, recipient_configured: false,
       recipient_masked: null, modem_configured: false, supported: true };
     this.plantSlotDates = Array(8).fill(null);
@@ -838,6 +858,8 @@ export class MockVerdeApi {
       mode: this.mode,
       requestedMode: this.mode,
       modeOverride: null,
+      pumpAutomation: { doseSettings: { volumes_ml: this.pumpVolumes, max_pulse_ml: 3.69,
+        flow_ml_per_second: 0.82 }, confirmationAvailable: false },
       updatedAt: new Date().toISOString(),
       systemStatus: "MOCK DEVELOPMENT DATA",
       sensors: [
@@ -969,6 +991,16 @@ export class MockVerdeApi {
       activeMode: mode,
       message: `Mock mode changed to ${mode}. The live backend will validate real requests.`
     };
+  }
+
+  async updatePumpDoseSettings(volumes) {
+    if (this.mode !== "Semi-Automation" || !volumes || Object.keys(volumes).sort().join() !== "pump1,pump2,pump3"
+        || !Object.values(volumes).every((value) => Number.isFinite(value) && value > 0 && value <= 3.69)) {
+      throw new Error("Select Semi-Automation and choose 0–3.69 mL per pump.");
+    }
+    await this.respond(null);
+    this.pumpVolumes = copy(volumes);
+    return { volumes_ml: copy(this.pumpVolumes) };
   }
 
   async acknowledgeIssue(issueKey) {

@@ -14,12 +14,12 @@ from datetime import datetime, timezone
 
 from app.automation import FULL, SEMI, OUTPUTS
 from app.automation.pump_decision import decide
+from app.automation.pump_dose_settings import load as load_dose_settings, save as save_dose_settings, durations as dose_durations, MAX_ML
 from app.components import Result
 
 
 GATEWAY = "/usr/local/libexec/verde_auto_pumps.py"
 COMMAND = ("/usr/bin/sudo", "-n", GATEWAY)
-DOSE_SECONDS = {"pump1": 4.5, "pump2": 4.5, "pump3": 4.5}
 CORRECTIVE_RECOMMENDATIONS = ("pH-Up dosing", "pH-Down dosing", "EC nutrient dosing")
 
 
@@ -71,6 +71,9 @@ class PumpRuntime:
     def request(self, action):
         return Result("BLOCKED — CONFIRMATION NOT YET INTEGRATED", detail=action)
 
+    def update_dose_settings(self, volumes):
+        return save_dose_settings(volumes)
+
     def confirm(self, state, live_snapshot):
         """Run one farmer-confirmed Semi dose after a fresh service tick."""
         automation = state.get("automation", {}) if isinstance(state, dict) else {}
@@ -100,7 +103,7 @@ class PumpRuntime:
                 camera_fault=camera.get("status") == "FAULT / ERROR",
                 vision_fault=plant.get("status") == "FAULT / ERROR",
                 last_dose_elapsed_seconds=gateway.get("last_dose_elapsed_seconds"),
-                calibrated_dose_seconds=DOSE_SECONDS,
+                calibrated_dose_seconds=dose_durations(load_dose_settings()),
                 circulation_flow_gpio_level="HIGH",
                 dosed_ml_by_pump=gateway.get("ml_in_last_24h"),
                 farmer_confirmed=True,
@@ -113,7 +116,7 @@ class PumpRuntime:
             result = self.command("dose", proposal.pump, f"{proposal.dose_seconds:.8f}")
             return Result("DOSED", value=result,
                           detail=f"Farmer confirmed {proposal.dose_action}")
-        except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
             stopped = self.all_off(str(exc))
             return Result("FAULT / ERROR", detail=f"Pump command failed: {exc}; {stopped.status}")
 
@@ -121,6 +124,9 @@ class PumpRuntime:
         """Apply one cycle after database writes succeeded; return display state."""
         output = copy.deepcopy(automation)
         try:
+            volumes = load_dose_settings()
+            output["dose_settings"] = {"volumes_ml": volumes, "max_pulse_ml": MAX_ML,
+                                       "flow_ml_per_second": 0.82}
             gateway = self.command("status")
             if gateway.get("in_progress"):
                 raise RuntimeError("An interrupted dose needs manual inspection")
@@ -159,7 +165,7 @@ class PumpRuntime:
                 camera_fault=(isinstance(camera, dict) and camera.get("status") == "FAULT / ERROR"),
                 vision_fault=(getattr(plant, "status", None) == "FAULT / ERROR"),
                 last_dose_elapsed_seconds=gateway.get("last_dose_elapsed_seconds"),
-                calibrated_dose_seconds=DOSE_SECONDS,
+                calibrated_dose_seconds=dose_durations(volumes),
                 circulation_flow_gpio_level="HIGH",
                 dosed_ml_by_pump=gateway.get("ml_in_last_24h"),
             )
@@ -178,7 +184,7 @@ class PumpRuntime:
                 output["outputs"][decision.dose_action] = (
                     f"DOSED {decision.dose_ml:.2f} mL / {decision.dose_seconds:.2f} s")
             return output
-        except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
             stopped = self.all_off(str(exc))
             output["selected_mode"] = SEMI
             output["active_mode"] = SEMI

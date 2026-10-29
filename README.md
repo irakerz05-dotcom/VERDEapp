@@ -633,3 +633,15 @@ The protected installer backs up the old gateway and refuses an armed update;
 the backend installer verifies the reviewed gateway, disarmed state, and
 source hashes before writing. Circulation remains stopped until a person
 physically confirms flow with the revised gateway's interactive `arm` command.
+
+`deploy/apply_pi_pump_dose_settings.py` adds per-pump requested volumes to the
+dashboard Settings page. Pump 1 is nutrients, Pump 2 is pH Up, and Pump 3 is
+pH Down. In Semi-Automation, the farmer may save a separate target above zero
+and at most 3.69 mL for each pump. The values persist in
+`/home/verde/VERDE-Sensor-Integration/pump_dose_settings.json`; saving never
+activates a pump. The service converts each target using the provisional
+0.82 mL/s rate and still applies the protected gateway's 4.5-second pulse,
+rolling 24-hour limits, one-pump-at-a-time rule, and 60-second mixing wait.
+The installer checks the reviewed 18 L runtime, backs up every changed backend
+file, and requires the gateway to be disarmed before applying. After restarting
+the service, physically verify circulation and arm the gateway again.

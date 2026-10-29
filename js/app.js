@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=59";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=59";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=60";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=60";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -180,7 +180,7 @@ function bindDoseConfirmation(data) {
     }
     showModal({
       title: "Confirm one dose?",
-      text: "The Pi will recheck the sensors and pump limits, then run one eligible dosing pump for up to 3.125 seconds (about 2.56 mL). Allow at least 1 minute of mixing before another dose.",
+      text: `The Pi will recheck the sensors and pump limits, then run one eligible dosing pump using its saved volume (up to ${Number(data.pumpAutomation?.doseSettings?.max_pulse_ml || 3.69).toFixed(2)} mL). Allow at least 1 minute of mixing before another dose.`,
       confirmText: "Confirm dose",
       onConfirm: async () => {
         button.disabled = true;
@@ -196,6 +196,50 @@ function bindDoseConfirmation(data) {
         }
       }
     });
+  });
+}
+
+function bindPumpDoseSettings(data) {
+  document.querySelector("[data-pump-dose-settings]")?.addEventListener("click", () => {
+    if (data.stale || !data.online || data.requestedMode !== "Semi-Automation") {
+      showToast("Use fresh data and select Semi-Automation before changing pump volumes.", "warn");
+      return;
+    }
+    const settings = data.pumpAutomation.doseSettings;
+    const maximum = Number(settings.max_pulse_ml);
+    const dialog = document.createElement("dialog");
+    const labels = { pump1: "Pump 1 · nutrients", pump2: "Pump 2 · pH Up", pump3: "Pump 3 · pH Down" };
+    dialog.innerHTML = `<form><h2>Dose volume per activation</h2>
+      <p>Set each pump's requested dose. The Pi keeps the ${maximum.toFixed(2)} mL pulse limit, daily limits, and 1-minute mixing wait. Saving does not activate a pump.</p>
+      ${Object.entries(labels).map(([pump, label]) => `<label class="dose-field">${safe(label)} <input name="${pump}" type="number" inputmode="decimal" min="0.01" max="${maximum}" step="0.01" required value="${Number(settings.volumes_ml[pump]).toFixed(2)}" /> mL</label>`).join("")}
+      <p class="dose-form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" data-dose-cancel class="secondary">Cancel</button><button type="submit" class="primary">Save volumes</button></div></form>`;
+    dialog.addEventListener("close", () => dialog.remove());
+    dialog.querySelector("[data-dose-cancel]").addEventListener("click", () => dialog.close());
+    dialog.querySelector("form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const volumes = Object.fromEntries(["pump1", "pump2", "pump3"].map((pump) => [pump, Number(form.elements[pump].value)]));
+      const errorLine = form.querySelector(".dose-form-error");
+      if (!Object.values(volumes).every((volume) => Number.isFinite(volume) && volume > 0 && volume <= maximum)) {
+        errorLine.textContent = `Each volume must be above 0 and at most ${maximum.toFixed(2)} mL.`;
+        errorLine.hidden = false;
+        return;
+      }
+      form.querySelector('[type="submit"]').disabled = true;
+      try {
+        await withTimeout(api.updatePumpDoseSettings(volumes));
+        dialog.close();
+        showToast("Pump dose volumes saved. No pump was activated.");
+        await render();
+      } catch (error) {
+        errorLine.textContent = error?.message || "Pump volumes could not be saved.";
+        errorLine.hidden = false;
+        form.querySelector('[type="submit"]').disabled = false;
+      }
+    });
+    document.body.append(dialog);
+    dialog.showModal();
   });
 }
 
@@ -541,15 +585,21 @@ function renderSettings(data, smsSettings = { supported: false }) {
   const smsSummary = smsSupported
     ? `${smsSettings.sms_enabled ? "Enabled" : "Disabled"} · ${smsSettings.recipient_configured ? `Recipient ${smsSettings.recipient_masked || "saved"}` : "No recipient saved"}`
     : "Backend SMS settings are unavailable. Update the Pi backend to configure alerts here.";
+  const pumpSettings = data.pumpAutomation?.doseSettings;
+  const pumpSummary = pumpSettings?.volumes_ml
+    ? `Nutrients ${Number(pumpSettings.volumes_ml.pump1).toFixed(2)} mL · pH Up ${Number(pumpSettings.volumes_ml.pump2).toFixed(2)} mL · pH Down ${Number(pumpSettings.volumes_ml.pump3).toFixed(2)} mL per activation`
+    : "Pump dose settings are unavailable from the Pi.";
   const content = `<section class="page-title"><h2>Settings</h2><p>${safe(sourceLabel(data))}</p></section>
     <section class="settings-list">
       <article><div><h2>Install on this device</h2><p>Installation requires the private HTTPS address. Live readings still require a connection to the Raspberry Pi.</p></div><button data-install-button type="button" class="secondary"${installed ? " disabled" : ""}>${installLabel}</button></article>
       <article><div><h2>Operating mode</h2><p>Active: ${safe(data.mode)} · Requested: ${safe(data.requestedMode || data.mode)}. Safety validation is enforced by the backend.</p></div><button data-mode-button type="button" class="secondary">Change mode</button></article>
+      <article><div><h2>Pumps 1–3 dose volumes</h2><p>${safe(pumpSummary)}</p><p>Settings can be changed in Semi-Automation. Saving does not run a pump.</p></div>${pumpSettings?.volumes_ml ? '<button data-pump-dose-settings type="button" class="secondary">Adjust volumes</button>' : ""}</article>
       <article><div><h2>GSM SMS alerts</h2><p>${safe(smsSummary)}</p><p>Mode: ${safe(data.settings.gsmStatus || "Unavailable")}</p></div>${smsSupported ? '<button data-sms-settings type="button" class="secondary">Configure</button>' : ""}</article>
       <article><div><h2>Application version</h2><p>VERDE monitoring PWA</p></div><span>${safe(data.settings.version)}</span></article>
     </section>`;
   app.innerHTML = renderShell(content, data);
   bindModeButton(data);
+  bindPumpDoseSettings(data);
   bindInstallButton();
   if (smsSupported) bindSmsSettingsButton(smsSettings, data);
   bindNav();
@@ -668,7 +718,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=59", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=60", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

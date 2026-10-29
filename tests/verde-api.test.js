@@ -562,6 +562,21 @@ test("farmer dose confirmation uses the protected backend route and reports a bl
   assert.deepEqual(JSON.parse(calls[1].options.body), {});
 });
 
+test("pump dose settings use the authenticated route and preserve per-pump volumes", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    return { ok: true, status: 200, json: async () => url.endsWith("/api/session")
+      ? { token: "test-token" } : { volumes_ml: { pump1: 1, pump2: 2, pump3: 3 } } };
+  };
+  const api = new VerdeApi({ fetchImpl });
+  const result = await api.updatePumpDoseSettings({ pump1: 1, pump2: 2, pump3: 3 });
+  assert.deepEqual(result.volumes_ml, { pump1: 1, pump2: 2, pump3: 3 });
+  assert.equal(calls[1].url, "/api/pump/dose-settings");
+  assert.equal(calls[1].options.headers["X-VERDE-Token"], "test-token");
+  assert.deepEqual(JSON.parse(calls[1].options.body), { volumes_ml: { pump1: 1, pump2: 2, pump3: 3 } });
+});
+
 test("real adapter keeps status and camera data when optional sensor routes are unavailable", async () => {
   const calls = [];
   const fetchImpl = async (url) => {

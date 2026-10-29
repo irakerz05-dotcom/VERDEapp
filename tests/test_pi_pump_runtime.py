@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from deploy import pi_pump_decision
+from deploy import pi_pump_decision, pi_pump_dose_settings
 
 
 def load_runtime():
@@ -24,6 +24,7 @@ def load_runtime():
         status=status, value=value, detail=detail)
     modules = {"app": app, "app.automation": automation,
                "app.automation.pump_decision": pi_pump_decision,
+               "app.automation.pump_dose_settings": pi_pump_dose_settings,
                "app.components": components}
     with patch.dict(sys.modules, modules):
         path = Path(__file__).resolve().parents[1] / "deploy/pi_pump_runtime.py"
@@ -74,6 +75,19 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(calls[1], ("circulation", "run"))
         self.assertEqual(calls[2], ("dose", "pump2", "4.50000000"))
         self.assertTrue(result["actuation_enabled"])
+
+    def test_saved_volume_shortens_the_requested_dose(self):
+        module = load_runtime()
+        module.load_dose_settings = lambda: {"pump1": 3.69, "pump2": 0.82, "pump3": 3.69}
+        runtime = module.PumpRuntime()
+        calls = []
+        gateway = {"armed": True, "circulation": "RUN", "in_progress": False,
+                   "last_dose_elapsed_seconds": None,
+                   "ml_in_last_24h": {"pump1": 0, "pump2": 0, "pump3": 0}}
+        runtime.command = lambda *args: calls.append(args) or gateway
+        result = runtime.apply(*inputs())
+        self.assertEqual(calls, [("status",), ("dose", "pump2", "1.00000000")])
+        self.assertEqual(result["dose_settings"]["volumes_ml"]["pump2"], 0.82)
 
     def test_vision_hold_allows_circulation_but_not_dose(self):
         runtime = load_runtime().PumpRuntime()

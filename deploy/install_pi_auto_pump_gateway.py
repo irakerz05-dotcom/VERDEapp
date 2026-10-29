@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import os
 import shutil
 import subprocess
@@ -22,6 +23,10 @@ SUDOERS = Path("/etc/sudoers.d/verde-auto-pumps")
 STATE_DIRECTORY = Path("/var/lib/verde")
 ARM_DIRECTORY = Path("/etc/verde")
 ARM_PATH = ARM_DIRECTORY / "pumps-armed"
+REVIEWED_GATEWAY_HASHES = {
+    "025c766b0a42f6e27fb59c76ac173e1b63e1e35c0eb9a0cdc1d4be5a72f713b8",  # 20 L
+    "91c0bf7666e4eae87cd04afd869b7d84ea9ff453e1ea410b54bed679c3aacc0b",  # 12.5 L
+}
 SUDOERS_TEXT = """# VERDE protected pump gateway. arm/disarm require interactive sudo.
 verde ALL=(root) NOPASSWD: /usr/local/libexec/verde_auto_pumps.py status, /usr/local/libexec/verde_auto_pumps.py safe-off, /usr/local/libexec/verde_auto_pumps.py circulation *, /usr/local/libexec/verde_auto_pumps.py dose *
 """
@@ -71,6 +76,11 @@ def main():
     gateway_source = SOURCE_GATEWAY.read_text(encoding="utf-8")
     validate_manual_source(manual_source)
     compile(gateway_source, str(SOURCE_GATEWAY), "exec")
+    if TARGET_GATEWAY.exists():
+        installed_hash = hashlib.sha256(TARGET_GATEWAY.read_bytes()).hexdigest()
+        current_hash = hashlib.sha256(gateway_source.encode()).hexdigest()
+        if installed_hash not in REVIEWED_GATEWAY_HASHES | {current_hash}:
+            parser.error("Installed pump gateway differs from reviewed versions")
     if args.check:
         print("Ready: reviewed manual GPIO mapping, five-second limit, "
               "protected gateway syntax; no files changed")

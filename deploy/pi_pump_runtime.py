@@ -19,7 +19,7 @@ from app.components import Result
 
 GATEWAY = "/usr/local/libexec/verde_auto_pumps.py"
 COMMAND = ("/usr/bin/sudo", "-n", GATEWAY)
-DOSE_SECONDS = {"pump1": 3.125, "pump2": 3.125, "pump3": 3.125}
+DOSE_SECONDS = {"pump1": 4.5, "pump2": 4.5, "pump3": 4.5}
 CORRECTIVE_RECOMMENDATIONS = ("pH-Up dosing", "pH-Down dosing", "EC nutrient dosing")
 
 

@@ -29,9 +29,9 @@ STOP_GPIO_LEVEL = "dl"   # Physically observed twice: LOW = stopped.
 FLOW_ML_PER_SECOND = 0.82
 MIX_SECONDS = 60.0
 WINDOW_SECONDS = 24 * 60 * 60
-MAX_AUTO_SECONDS = 3.125
-LIMITS_ML = {"pump1": 6.25, "pump2": 3.6625, "pump3": 2.5625}
-ARM_RECORD = "GPIO24 HIGH=FLOW LOW=STOP; 12.5L\n"
+MAX_AUTO_SECONDS = 4.5
+LIMITS_ML = {"pump1": 9.0, "pump2": 5.274, "pump3": 3.69}
+ARM_RECORD = "GPIO24 HIGH=FLOW LOW=STOP; 18L\n"
 
 
 def protected_controller():

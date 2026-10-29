@@ -76,6 +76,7 @@ def main():
     mode.add_argument("--apply", action="store_true")
     parser.add_argument("--target", type=Path, default=ROOT)
     args = parser.parse_args()
+    parser.exit(1, "12.5 L update superseded by apply_pi_reservoir_18.py; no files changed\n")
     source = Path(__file__).parent
     try:
         changed = plan(args.target, source)

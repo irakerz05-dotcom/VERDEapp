@@ -553,18 +553,18 @@ The separate `pi_pump_decision.py` module is a proposed, pure decision policy;
 it is not installed by this mode patch. It uses a 60-second mixing wait and
 requires an explicit dose duration and physically verified GPIO24 flow level.
 `pi_pump_flow_observations.json` records Pump 1 at 0.82 mL/s, Pumps 2 and 3
-as shared-model estimates, and the corrected 12.5 L operating reservoir. Those values
+as shared-model estimates, and the corrected 18 L operating reservoir. Those values
 do not activate pumps or establish a chemical dose.
 
-The provisional 12.5 L limits are 3.6625 mL pH Up (Pump 2),
-2.5625 mL pH Down (Pump 3), or 6.25 mL nutrients (Pump 1). Each decision proposes
-at most 2.5625 mL over 3.125 seconds at the assumed 0.82 mL/s rate. These
-limits are the earlier 20 L amounts multiplied by 12.5/20. The last run
+The provisional 18 L limits are 5.274 mL pH Up (Pump 2),
+3.69 mL pH Down (Pump 3), or 9 mL nutrients (Pump 1). Each decision proposes
+at most 3.69 mL over 4.5 seconds at the assumed 0.82 mL/s rate. These
+limits are the earlier 20 L amounts multiplied by 18/20. The last run
 of a course is shortened to its remaining allowance. The next
 decision must wait 60 seconds after the previous dose and use a fresh reading;
 it stops when the target range is reached or the course limit is spent.
 The pH course amounts are arithmetic estimates from the sequential 2 L test,
-not verified doses for the 12.5 L reservoir. A Critical reading, including
+not verified doses for the 18 L reservoir. A Critical reading, including
 pH 8.5 or EC 0.3 mS/cm, overrides to Semi and blocks automatic dosing.
 The policy requires recorded cumulative volume to enforce its limits; a
 missing record blocks dosing. Physical control remains disabled until the
@@ -587,9 +587,9 @@ unplugged again while configuring the integration. The protected gateway
 installer, `deploy/install_pi_auto_pump_gateway.py`, copies the existing
 manual controller to a root-owned directory and adds a scoped service command
 path. It starts disarmed and changes no GPIO. Its root-owned ledger enforces
-one dosing command at a time, at most 3.125 seconds per automatic command,
+one dosing command at a time, at most 4.5 seconds per automatic command,
 at least one minute between completed doses, and rolling 24-hour limits of
-6.25 mL nutrients, 3.6625 mL pH Up, and 2.5625 mL pH Down at the assumed
+9 mL nutrients, 5.274 mL pH Up, and 3.69 mL pH Down at the assumed
 0.82 mL/s flow. An
 interrupted dose remains blocked pending manual inspection. Arming requires
 the circulation pump reconnected and actual flow observed; the web service
@@ -621,14 +621,14 @@ when the backend reports an eligible recommendation. The protected gateway
 still rejects every dose while disarmed. The installer backs up each changed
 Pi file and never arms the gateway or switches a pump.
 
-The user subsequently corrected the operating reservoir from 20 L to 12.5 L.
-The provisional per-dose and 24-hour limits were reduced by 12.5/20 to keep
-the earlier maximum mL per liter unchanged: one pulse is at most 2.5625 mL
-over 3.125 seconds; the rolling limits are 6.25 mL nutrients, 3.6625 mL pH Up,
-and 2.5625 mL pH Down. These are upper bounds, not a predicted correction.
+The user subsequently corrected the operating reservoir to 18 L. The
+provisional per-dose and 24-hour limits use 18/20 of the original 20 L
+proposal: one pulse is at most 3.69 mL over 4.5 seconds; the rolling limits
+are 9 mL nutrients, 5.274 mL pH Up, and 3.69 mL pH Down. These are upper
+bounds, not a predicted correction. The earlier 12.5 L installer is retired.
 To update the protected Pi gateway, put the service in Semi-Automation, use its
 interactive `disarm` command, run `deploy/install_pi_auto_pump_gateway.py`,
-then apply `deploy/apply_pi_reservoir_125.py` and restart `verde.service`.
+then apply `deploy/apply_pi_reservoir_18.py` and restart `verde.service`.
 The protected installer backs up the old gateway and refuses an armed update;
 the backend installer verifies the reviewed gateway, disarmed state, and
 source hashes before writing. Circulation remains stopped until a person

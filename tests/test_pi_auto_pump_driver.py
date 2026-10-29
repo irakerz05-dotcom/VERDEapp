@@ -28,12 +28,12 @@ class FakeController:
 
 class GatewayTests(unittest.TestCase):
     def test_corrected_reservoir_caps_the_pulse_and_requires_new_arm_record(self):
-        self.assertEqual(driver.ARM_RECORD, "GPIO24 HIGH=FLOW LOW=STOP; 12.5L\n")
+        self.assertEqual(driver.ARM_RECORD, "GPIO24 HIGH=FLOW LOW=STOP; 18L\n")
         self.assertEqual(driver.LIMITS_ML,
-                         {"pump1": 6.25, "pump2": 3.6625, "pump3": 2.5625})
+                         {"pump1": 9.0, "pump2": 5.274, "pump3": 3.69})
         controller = FakeController()
         with patch.object(driver, "armed", return_value=True):
-            with self.assertRaisesRegex(RuntimeError, "3.125 seconds"):
+            with self.assertRaisesRegex(RuntimeError, "4.5 seconds"):
                 driver.dose(controller, {"events": [], "in_progress": False},
                             1000.0, "pump2", 5.0)
         self.assertEqual(controller.dose_calls, [])
@@ -54,18 +54,18 @@ class GatewayTests(unittest.TestCase):
                   patch.object(driver, "armed", return_value=True),
                   patch.object(driver.time, "time", return_value=1070.0)):
                 state = {"version": 1, "events": [], "in_progress": False}
-                result = driver.dose(controller, state, 1000.0, "pump1", 3.125)
-                self.assertEqual(result["estimated_ml"], 2.5625)
-                self.assertEqual(controller.dose_calls, [("pump1", 3.125)])
+                result = driver.dose(controller, state, 1000.0, "pump1", 4.5)
+                self.assertAlmostEqual(result["estimated_ml"], 3.69)
+                self.assertEqual(controller.dose_calls, [("pump1", 4.5)])
                 saved = json.loads(state_path.read_text())
                 self.assertFalse(saved["in_progress"])
-                self.assertEqual(driver.totals(saved)["pump1"], 2.5625)
+                self.assertAlmostEqual(driver.totals(saved)["pump1"], 3.69)
                 with self.assertRaisesRegex(RuntimeError, "mixing wait"):
-                    driver.dose(controller, saved, 1100.0, "pump1", 3.125)
-                saved["events"][0]["ml"] = 5.0
+                    driver.dose(controller, saved, 1100.0, "pump1", 4.5)
+                saved["events"][0]["ml"] = 7.0
                 with self.assertRaisesRegex(RuntimeError, "volume limit"):
-                    driver.dose(controller, saved, 1200.0, "pump1", 3.125)
-                self.assertEqual(controller.dose_calls, [("pump1", 3.125)])
+                    driver.dose(controller, saved, 1200.0, "pump1", 4.5)
+                self.assertEqual(controller.dose_calls, [("pump1", 4.5)])
 
     def test_interrupted_ledger_blocks_redose(self):
         controller = FakeController()

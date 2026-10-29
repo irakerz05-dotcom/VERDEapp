@@ -16,9 +16,9 @@ SEMI = "Semi-Automation Mode"
 MIX_SECONDS = 60.0
 MAX_SAMPLE_AGE_SECONDS = 65.0
 ASSUMED_FLOW_ML_PER_SECOND = 0.82
-MAX_RUN_SECONDS = 3.125  # 2.5625 mL at 0.82 mL/s, scaled from the 20 L proposal.
+MAX_RUN_SECONDS = 4.5  # 3.69 mL at 0.82 mL/s, scaled from the 20 L proposal.
 DOSE_VOLUME_ML = ASSUMED_FLOW_ML_PER_SECOND * MAX_RUN_SECONDS
-COURSE_LIMIT_ML = {"pump1": 6.25, "pump2": 3.6625, "pump3": 2.5625}
+COURSE_LIMIT_ML = {"pump1": 9.0, "pump2": 5.274, "pump3": 3.69}
 PUMP_BY_ACTION = {
     "nutrient_dosing": "pump1",  # GPIO27
     "ph_up": "pump2",           # GPIO22

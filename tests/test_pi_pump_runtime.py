@@ -72,7 +72,7 @@ class RuntimeTests(unittest.TestCase):
         result = runtime.apply(*inputs())
         self.assertEqual(calls[0], ("status",))
         self.assertEqual(calls[1], ("circulation", "run"))
-        self.assertEqual(calls[2], ("dose", "pump2", "3.12500000"))
+        self.assertEqual(calls[2], ("dose", "pump2", "4.50000000"))
         self.assertTrue(result["actuation_enabled"])
 
     def test_vision_hold_allows_circulation_but_not_dose(self):
@@ -131,7 +131,7 @@ class RuntimeTests(unittest.TestCase):
                  "camera": camera}
         result = runtime.confirm(state, snapshot)
         self.assertEqual(result.status, "DOSED")
-        self.assertEqual(calls, [("status",), ("dose", "pump3", "3.12500000")])
+        self.assertEqual(calls, [("status",), ("dose", "pump3", "4.50000000")])
 
     def test_fault_blocks_farmer_confirmation_before_gateway_call(self):
         runtime = load_runtime().PumpRuntime()

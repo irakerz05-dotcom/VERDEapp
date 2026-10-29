@@ -188,8 +188,8 @@ should appear after the next sensor acquisition (normally about 30 seconds).
 
 ## NFT planting records
 
-The Plants page has six fixed positions, numbered left to right: P1–P3 in
-the top NFT row and P4–P6 in the bottom row. The camera overlay, planting
+The Plants page has eight fixed positions, numbered left to right: P1–P4 in
+the top NFT row and P5–P8 in the bottom row. The camera overlay, planting
 record grid, and descriptive sensor-vision fusion use that same layout.
 Select a position to enter a planting date. The Pi calculates days growing;
 swap moves two saved dates, and erase clears a date for a replacement plant.
@@ -202,15 +202,15 @@ least 30 days old and its current vision classification is Healthy. Missing
 dates, missing detections, vision faults, and stale data cannot qualify. This
 display rule does not alter the vision model, GSM alerts, or dosing decisions.
 
-The six-slot update uses the existing `plant_slots_v2` SQLite table and keeps
-any saved P1–P6 dates. Earlier P7–P10 rows remain in SQLite for audit but are
-neither shown nor editable. Camera detections are assigned to fixed thirds
-of each image row; missing detections do not shift adjacent slot numbers.
-After the Pi reconnects, pull this branch and run
-`python3 deploy/apply_pi_six_plant_slots.py --check` followed by `--apply`.
-The installer validates the reviewed ten-slot modules, backs them up, and
-does not control GPIO. Restart `verde.service` to load the two new modules,
-then verify six records at `/api/plant-slots` and six entries in
+The eight-slot update creates `plant_slots_v3` on first use and copies any
+saved P1–P6 dates from `plant_slots_v2`. New P7 and P8 start with blank dates;
+older records for those numbers remain in the original table for audit.
+Camera detections are assigned to fixed quarters of each image row; missing
+detections do not shift adjacent slot numbers. On the Pi, pull this branch
+and run `python3 deploy/apply_pi_eight_plant_slots.py --check` followed by
+`--apply`. The installer validates the reviewed six-slot modules, backs them
+up, and does not control GPIO. Restart `verde.service` to load the two new
+modules, then verify eight records at `/api/plant-slots` and eight entries in
 `/api/status` under `fusion_by_slot`.
 
 ## Experimental water-quality Random Forest

@@ -1,7 +1,7 @@
 export const PAGES = ["Dashboard", "Plants", "History", "Alerts", "Settings"];
 
 export function harvestReadiness(slots, fusionRows, live) {
-  return Array.from({ length: 6 }, (_, index) => {
+  return Array.from({ length: 8 }, (_, index) => {
     const slot = index + 1;
     const record = slots?.supported && !slots.error ? slots.slots?.[index] : null;
     const vision = fusionRows?.[index];

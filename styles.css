@@ -62,7 +62,7 @@ dialog .sms-form-error { color:#a32c27;font-size:.78rem;font-weight:700;margin:0
 .nft-rows { display:grid;gap:8px;margin-top:16px; }
 .nft-fusion { display:grid;gap:8px;margin-top:16px; }
 .nft-fusion>span { color:var(--muted);font-size:.72rem;font-weight:750; }
-.nft-fusion-row { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;direction:ltr;padding-bottom:4px; }
+.nft-fusion-row { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;direction:ltr;padding-bottom:4px; }
 .harvest-summary { color:var(--green);font-size:.82rem; }
 .nft-harvest-row .nft-fusion-card { align-content:start; }
 .nft-fusion-card { display:grid;gap:5px;direction:ltr;min-width:0;padding:10px;border:1px solid var(--line);border-radius:12px;background:#f7faf7; }
@@ -73,7 +73,7 @@ dialog .sms-form-error { color:#a32c27;font-size:.78rem;font-weight:700;margin:0
 .nft-fusion-card.warn b { color:#a56b00; }
 .nft-fusion-card.danger b { color:#b53630; }
 .nft-rows>span { font-size:.72rem;font-weight:750;color:var(--muted); }
-.nft-slot-row { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;direction:ltr; }
+.nft-slot-row { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;direction:ltr; }
 .nft-slot { min-width:0;display:grid;gap:1px;justify-items:center;direction:ltr;border:1px solid #d0e4cf;border-radius:9px;background:#f1f8ee;color:var(--green);padding:7px 2px;cursor:pointer;font:inherit; }
 .nft-slot.planted { background:#dcf2db;border-color:#85c77f; }
 .nft-slot strong { font-size:.75rem; }

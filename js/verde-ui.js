@@ -1,5 +1,30 @@
 export const PAGES = ["Dashboard", "Plants", "History", "Alerts", "Settings"];
 
+export function harvestReadiness(slots, fusionRows, live) {
+  return Array.from({ length: 6 }, (_, index) => {
+    const slot = index + 1;
+    const record = slots?.supported && !slots.error ? slots.slots?.[index] : null;
+    const vision = fusionRows?.[index];
+    if (!live || !record || vision?.slot !== slot || vision.status === "Stale") {
+      return { slot, status: "Unavailable", detail: "Waiting for current records and vision results.", tone: "inactive" };
+    }
+    if (record.plantedOn === null || !Number.isInteger(record.daysGrowing)) {
+      return { slot, status: "Set date", detail: "Planting date needed.", tone: "inactive" };
+    }
+    const age = record.daysGrowing;
+    if (vision.status !== "READY" || !vision.plantCondition) {
+      return { slot, status: vision.status === "NO DETECTION" ? "No detection" : "Vision unavailable",
+        detail: `${age} days · Healthy detection needed.`, tone: "inactive" };
+    }
+    if (vision.plantCondition !== "Healthy") {
+      return { slot, status: "Not ready", detail: `${age} days · ${vision.plantCondition}`, tone: "warn" };
+    }
+    return age >= 30
+      ? { slot, status: "Harvest-Ready", detail: `${age} days · Healthy`, tone: "good" }
+      : { slot, status: "Growing", detail: `${age} of 30 days · Healthy`, tone: "warn" };
+  });
+}
+
 export function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
     "&": "&amp;",

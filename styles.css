@@ -63,6 +63,8 @@ dialog .sms-form-error { color:#a32c27;font-size:.78rem;font-weight:700;margin:0
 .nft-fusion { display:grid;gap:8px;margin-top:16px; }
 .nft-fusion>span { color:var(--muted);font-size:.72rem;font-weight:750; }
 .nft-fusion-row { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;direction:ltr;padding-bottom:4px; }
+.harvest-summary { color:var(--green);font-size:.82rem; }
+.nft-harvest-row .nft-fusion-card { align-content:start; }
 .nft-fusion-card { display:grid;gap:5px;direction:ltr;min-width:0;padding:10px;border:1px solid var(--line);border-radius:12px;background:#f7faf7; }
 .nft-fusion-card strong { font-size:.8rem;color:var(--ink); }
 .nft-fusion-card span,.nft-fusion-card small { font-size:.68rem;color:var(--muted);overflow-wrap:anywhere; }

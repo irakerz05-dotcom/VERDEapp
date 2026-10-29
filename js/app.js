@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=57";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=57";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=58";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=58";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -333,6 +333,12 @@ function plantFusionRow(rows, first) {
   }).join("")}</div>`;
 }
 
+function harvestRow(rows, first) {
+  return `<div class="nft-fusion-row nft-harvest-row">${rows.slice(first - 1, first + 2).map((item) =>
+    `<article class="nft-fusion-card ${item.tone}" aria-label="Plant ${item.slot}: ${safe(item.status)}"><strong>P${item.slot}</strong><b>${safe(item.status)}</b><small>${safe(item.detail)}</small></article>`
+  ).join("")}</div>`;
+}
+
 function showPlantSlotDialog(slot, slots) {
   const dialog = document.createElement("dialog");
   dialog.innerHTML = `<form id="plant-slot-form"><h2>Plant ${slot.slot}</h2>
@@ -382,6 +388,10 @@ function showPlantSlotDialog(slot, slots) {
 }
 
 function renderPlants(data, slots = null) {
+  const readiness = harvestReadiness(slots, data.fusionBySlot, data.online && !data.stale);
+  const readyCount = readiness.filter((item) => item.status === "Harvest-Ready").length;
+  const readinessSummary = data.online && !data.stale && slots?.supported && !slots.error && data.fusionBySlot
+    ? `${readyCount} of 6 Harvest-Ready` : "Waiting for current planting and vision data";
   const frameUrl = safeResourceUrl(data.plant.frameUrl, window.location.href);
   const camera = frameUrl
     ? `<figure class="camera-frame"><div class="nft-camera"><img src="${safe(frameUrl)}" alt="${data.plant.aiAnnotated ? "Latest AI-annotated plant detection frame" : "Latest camera frame"}" /><div class="nft-camera-labels"><div class="nft-camera-row top">${plantSlotRow(slots, 1, true)}</div><div class="nft-camera-row bottom">${plantSlotRow(slots, 4, true)}</div></div></div>${data.plant.aiAnnotated ? `<figcaption><b>Experimental AI overlay</b><span>Boxes and confidence come from the latest completed two-stage YOLO analysis.</span></figcaption>` : ""}</figure>`
@@ -402,9 +412,10 @@ function renderPlants(data, slots = null) {
   const content = `<section class="page-title"><h2>Plant Monitoring</h2><p>${safe(sourceLabel(data))}</p></section>
     ${camera}
     <section class="plant-panel nft-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">▦</span><div><p class="eyebrow">NFT PLANTING RECORDS</p><h2>6 fixed plant slots</h2></div></div><p class="classification-note">Slots run left to right: P1–P3 in the top row, P4–P6 in the bottom row. Dates are entered by the farmer; camera detections are matched to these fixed positions.</p>${slots?.supported ? `<div class="nft-rows" aria-label="Plant slots"><span>Top NFT row</span>${plantSlotRow(slots, 1)}<span>Bottom NFT row</span>${plantSlotRow(slots, 4)}</div>${data.stale || !data.online || slots.error ? `<p role="status">${safe(slots.error || "Planting records may be stale. Reconnect before editing.")}</p>` : ""}` : `<p role="status">Planting records are unavailable until the Pi backend is updated.</p>`}</section>
-    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT CONDITION</p><h2>Vision analysis</h2></div></div><div class="classification-grid" aria-label="Latest per-class plant analysis">${classificationCards}</div><p class="classification-note">Harvest-Ready is an experimental visual indication and should be confirmed using growing-day records.</p></section>
+    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT CONDITION</p><h2>Vision analysis</h2></div></div><div class="classification-grid" aria-label="Latest per-class plant analysis">${classificationCards}</div><p class="classification-note">This card shows the vision model's own Harvest-Ready detections. The planting-age and Healthy rule is shown separately below.</p></section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◌</span><div><p class="eyebrow">SIMULATED PEST TEST</p><h2>Printed insect props</h2></div></div><div class="notice ${simulated.detected === null ? "warn" : simulated.detected ? "danger" : "good"}"><b aria-hidden="true">${simulated.detected === false ? "✓" : "!"}</b><div><strong>${safe(simulated.status)}</strong><small>${safe(simulated.detail)}</small></div></div>${simulatedFrameUrl ? `<figure class="camera-frame"><img src="${safe(simulatedFrameUrl)}" alt="Latest annotated printed insect prop check" /><figcaption><b>Saved camera photo</b><span>Yellow boxes show detected printed props. Results refresh after the Pi finishes each scan.</span></figcaption></figure>` : ""}<p class="classification-note">Original backend pest model: ${safe(data.plant.pestStatus)}. ${safe(data.plant.pestDetail)} This separate demonstration never triggers GSM or dosing.</p></section>
-    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>By plant slot</h2></div></div>${data.fusionBySlot ? `<div class="nft-fusion" aria-label="Fusion confidence by NFT plant slot"><p class="classification-note">Water Quality prototype combined with each classified plant. P1–P3 appear left to right above P4–P6. This is a descriptive confidence level.</p><span>Top NFT row</span>${plantFusionRow(data.fusionBySlot, 1)}<span>Bottom NFT row</span>${plantFusionRow(data.fusionBySlot, 4)}</div>` : `<p class="classification-note" role="status">Per-plant fusion is unavailable.</p>`}</section>`;
+    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>By plant slot</h2></div></div>${data.fusionBySlot ? `<div class="nft-fusion" aria-label="Fusion confidence by NFT plant slot"><p class="classification-note">Water Quality prototype combined with each classified plant. P1–P3 appear left to right above P4–P6. This is a descriptive confidence level.</p><span>Top NFT row</span>${plantFusionRow(data.fusionBySlot, 1)}<span>Bottom NFT row</span>${plantFusionRow(data.fusionBySlot, 4)}</div>` : `<p class="classification-note" role="status">Per-plant fusion is unavailable.</p>`}</section>
+    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">HARVEST READINESS</p><h2>Healthy plants at 30+ days</h2></div></div><p class="classification-note">A slot is Harvest-Ready when its saved planting date is at least 30 days old and its current vision result is Healthy. Confirm maturity before harvesting.</p><div class="nft-fusion" aria-label="Harvest readiness by NFT plant slot"><strong class="harvest-summary">${safe(readinessSummary)}</strong><span>Top NFT row</span>${harvestRow(readiness, 1)}<span>Bottom NFT row</span>${harvestRow(readiness, 4)}</div></section>`;
   app.innerHTML = renderShell(content, data);
   document.querySelectorAll("[data-plant-slot]").forEach((button) => button.addEventListener("click", () => {
     if (data.stale || !data.online || slots?.error) {
@@ -657,7 +668,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=57", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=58", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

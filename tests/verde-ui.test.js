@@ -2,7 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "../js/verde-ui.js";
+import { buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "../js/verde-ui.js";
+
+test("harvest readiness requires a current Healthy result and at least 30 growing days", () => {
+  const slots = { supported: true, slots: [29, 30, 31, 35, null, 40].map((daysGrowing, index) => ({
+    slot: index + 1, plantedOn: daysGrowing === null ? null : "2026-09-01", daysGrowing
+  })) };
+  const fusion = ["Healthy", "Healthy", "Yellowing", null, "Healthy", "Healthy"].map((plantCondition, index) => ({
+    slot: index + 1, plantCondition, status: plantCondition ? "READY" : "NO DETECTION"
+  }));
+  assert.deepEqual(harvestReadiness(slots, fusion, true).map((item) => item.status),
+    ["Growing", "Harvest-Ready", "Not ready", "No detection", "Set date", "Harvest-Ready"]);
+  assert.ok(harvestReadiness(slots, fusion, false).every((item) => item.status === "Unavailable"));
+  fusion[5].status = "Stale";
+  assert.equal(harvestReadiness(slots, fusion, true)[5].status, "Unavailable");
+});
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -50,17 +64,17 @@ test("service-worker assets match versioned index and module references", async 
     readFile(`${root}js/app.js`, "utf8")
   ]);
 
-  assert.match(index, /href="styles\.css\?v=57"/);
-  assert.match(index, /src="js\/app\.js\?v=57"/);
-  assert.match(app, /services\/verde-api\.js\?v=57/);
-  assert.match(app, /verde-ui\.js\?v=57/);
+  assert.match(index, /href="styles\.css\?v=58"/);
+  assert.match(index, /src="js\/app\.js\?v=58"/);
+  assert.match(app, /services\/verde-api\.js\?v=58/);
+  assert.match(app, /verde-ui\.js\?v=58/);
   assert.match(app, /sensor-detail/);
   assert.match(app, /Problem timeline/);
   assert.match(app, /Alerts & activity/);
-  assert.match(worker, /"\.\/styles\.css\?v=57"/);
-  assert.match(worker, /"\.\/js\/app\.js\?v=57"/);
-  assert.match(worker, /"\.\/js\/verde-ui\.js\?v=57"/);
-  assert.match(worker, /"\.\/js\/services\/verde-api\.js\?v=57"/);
+  assert.match(worker, /"\.\/styles\.css\?v=58"/);
+  assert.match(worker, /"\.\/js\/app\.js\?v=58"/);
+  assert.match(worker, /"\.\/js\/verde-ui\.js\?v=58"/);
+  assert.match(worker, /"\.\/js\/services\/verde-api\.js\?v=58"/);
   const dashboard = app.split("function renderDashboard(data) {")[1]?.split("function plantAge(slot) {")[0];
   const plants = app.split("function renderPlants(data, slots = null) {")[1];
   assert.ok(dashboard);
@@ -72,6 +86,9 @@ test("service-worker assets match versioned index and module references", async 
   assert.match(plants, /6 fixed plant slots/);
   assert.match(plants, /plantSlotRow\(slots, 4\)/);
   assert.match(plants, /plantFusionRow\(data\.fusionBySlot, 4\)/);
+  assert.match(plants, /HARVEST READINESS/);
+  assert.match(plants, /harvestRow\(readiness, 1\)/);
+  assert.match(plants, /harvestRow\(readiness, 4\)/);
   assert.doesNotMatch(plants, /plantSlotRow\(slots, 6\)|plantFusionRow\(data\.fusionBySlot, 6\)/);
   assert.doesNotMatch(plants, /class="plant-result"|class="fusion-result"/);
   assert.match(worker, /caches\.delete/);

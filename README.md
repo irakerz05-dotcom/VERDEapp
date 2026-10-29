@@ -196,6 +196,12 @@ swap moves two saved dates, and erase clears a date for a replacement plant.
 Camera detection boxes do not establish plant identity, and planting age does
 not automatically change the experimental AI result.
 
+The Plants page also shows a separate harvest-readiness card for each fixed
+slot. It labels a slot Harvest-Ready only when its saved planting date is at
+least 30 days old and its current vision classification is Healthy. Missing
+dates, missing detections, vision faults, and stale data cannot qualify. This
+display rule does not alter the vision model, GSM alerts, or dosing decisions.
+
 The six-slot update uses the existing `plant_slots_v2` SQLite table and keeps
 any saved P1–P6 dates. Earlier P7–P10 rows remain in SQLite for audit but are
 neither shown nor editable. Camera detections are assigned to fixed thirds

@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=55";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=55";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=56";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=56";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -180,7 +180,7 @@ function bindDoseConfirmation(data) {
     }
     showModal({
       title: "Confirm one dose?",
-      text: "The Pi will recheck the sensors and pump limits, then run one eligible dosing pump for up to 5 seconds (about 4.1 mL). Allow at least 1 minute of mixing before another dose.",
+      text: "The Pi will recheck the sensors and pump limits, then run one eligible dosing pump for up to 3.125 seconds (about 2.56 mL). Allow at least 1 minute of mixing before another dose.",
       confirmText: "Confirm dose",
       onConfirm: async () => {
         button.disabled = true;
@@ -657,7 +657,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=55", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=56", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

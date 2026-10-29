@@ -29,7 +29,9 @@ STOP_GPIO_LEVEL = "dl"   # Physically observed twice: LOW = stopped.
 FLOW_ML_PER_SECOND = 0.82
 MIX_SECONDS = 60.0
 WINDOW_SECONDS = 24 * 60 * 60
-LIMITS_ML = {"pump1": 10.0, "pump2": 5.86, "pump3": 4.1}
+MAX_AUTO_SECONDS = 3.125
+LIMITS_ML = {"pump1": 6.25, "pump2": 3.6625, "pump3": 2.5625}
+ARM_RECORD = "GPIO24 HIGH=FLOW LOW=STOP; 12.5L\n"
 
 
 def protected_controller():
@@ -50,7 +52,7 @@ def armed():
     try:
         metadata = ARM_PATH.stat()
         return (metadata.st_uid == 0 and not metadata.st_mode & 0o077
-                and ARM_PATH.read_text(encoding="utf-8") == "GPIO24 HIGH=FLOW LOW=STOP; 20L\n")
+                and ARM_PATH.read_text(encoding="utf-8") == ARM_RECORD)
     except FileNotFoundError:
         return False
 
@@ -137,8 +139,8 @@ def dose(controller, data, clock, pump, seconds):
         raise RuntimeError("An interrupted dose needs manual inspection")
     if circulation_state(controller) != "RUN":
         raise RuntimeError("Circulation is not confirmed running")
-    if not isinstance(seconds, float) or not math.isfinite(seconds) or not 0 < seconds <= 5:
-        raise RuntimeError("Dose duration must be greater than zero and at most five seconds")
+    if not isinstance(seconds, float) or not math.isfinite(seconds) or not 0 < seconds <= MAX_AUTO_SECONDS:
+        raise RuntimeError(f"Dose duration must be greater than zero and at most {MAX_AUTO_SECONDS} seconds")
     elapsed = last_elapsed(data, clock)
     if elapsed is not None and elapsed < MIX_SECONDS:
         raise RuntimeError("The 60-second mixing wait has not elapsed")
@@ -208,7 +210,7 @@ def main():
                 try:
                     if input("Is water physically flowing? Type FLOWING to arm: ").strip() != "FLOWING":
                         raise RuntimeError("Physical flow not confirmed; controller stays disarmed")
-                    ARM_PATH.write_text("GPIO24 HIGH=FLOW LOW=STOP; 20L\n", encoding="utf-8")
+                    ARM_PATH.write_text(ARM_RECORD, encoding="utf-8")
                     os.chmod(ARM_PATH, 0o600)
                 except BaseException:
                     set_circulation(controller, "STOP")

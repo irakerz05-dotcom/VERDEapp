@@ -29,8 +29,7 @@ class FakeController:
 class GatewayTests(unittest.TestCase):
     def test_corrected_reservoir_caps_the_pulse_and_requires_new_arm_record(self):
         self.assertEqual(driver.ARM_RECORD, "GPIO24 HIGH=FLOW LOW=STOP; 18L\n")
-        self.assertEqual(driver.LIMITS_ML,
-                         {"pump1": 9.0, "pump2": 5.274, "pump3": 3.69})
+        self.assertEqual(driver.PUMPS, ("pump1", "pump2", "pump3"))
         controller = FakeController()
         with patch.object(driver, "armed", return_value=True):
             with self.assertRaisesRegex(RuntimeError, "4.5 seconds"):
@@ -46,7 +45,7 @@ class GatewayTests(unittest.TestCase):
                             1000.0, "pump1", 3.125)
         self.assertEqual(controller.dose_calls, [])
 
-    def test_persistent_budget_and_cooldown(self):
+    def test_ledger_and_cooldown_without_daily_limit(self):
         controller = FakeController()
         with tempfile.TemporaryDirectory() as directory:
             state_path = Path(directory) / "state.json"
@@ -63,9 +62,9 @@ class GatewayTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "mixing wait"):
                     driver.dose(controller, saved, 1100.0, "pump1", 4.5)
                 saved["events"][0]["ml"] = 7.0
-                with self.assertRaisesRegex(RuntimeError, "volume limit"):
-                    driver.dose(controller, saved, 1200.0, "pump1", 4.5)
-                self.assertEqual(controller.dose_calls, [("pump1", 4.5)])
+                driver.dose(controller, saved, 1200.0, "pump1", 4.5)
+                self.assertEqual(controller.dose_calls, [("pump1", 4.5), ("pump1", 4.5)])
+                self.assertIsNone(driver.status(controller, saved, 1200.0)["limits_ml_in_24h"])
 
     def test_interrupted_ledger_blocks_redose(self):
         controller = FakeController()

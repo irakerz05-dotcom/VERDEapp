@@ -171,21 +171,21 @@ function bindModeButton(data) {
 }
 
 function bindDoseConfirmation(data) {
-  const button = document.querySelector("[data-confirm-dose]");
-  if (!button) return;
-  button.addEventListener("click", () => {
+  const buttons = document.querySelectorAll("[data-confirm-dose]");
+  if (!buttons.length) return;
+  buttons.forEach((button) => button.addEventListener("click", () => {
     if (data.stale || !data.online) {
       showToast("Wait for fresh live readings before confirming a dose.", "warn");
       return;
     }
     showModal({
-      title: "Confirm one dose?",
-      text: `The Pi will recheck the sensors and pump limits, then run one eligible dosing pump using its saved volume (up to ${Number(data.pumpAutomation?.doseSettings?.max_pulse_ml || 3.69).toFixed(2)} mL). Allow at least 1 minute of mixing before another dose.`,
+      title: `Confirm ${button.dataset.pumpLabel}?`,
+      text: `The Pi will recheck the sensors, then run only ${button.dataset.pumpLabel} using its saved volume (up to ${Number(data.pumpAutomation?.doseSettings?.max_pulse_ml || 3.69).toFixed(2)} mL). Allow at least 1 minute of mixing before another dose.`,
       confirmText: "Confirm dose",
       onConfirm: async () => {
         button.disabled = true;
         try {
-          const result = await withTimeout(api.confirmDose(), 45_000);
+          const result = await withTimeout(api.confirmDose(button.dataset.pump), 45_000);
           showToast(result.detail || "One dose completed.");
           await render();
         } catch (error) {
@@ -196,7 +196,7 @@ function bindDoseConfirmation(data) {
         }
       }
     });
-  });
+  }));
 }
 
 function bindPumpDoseSettings(data) {
@@ -210,7 +210,7 @@ function bindPumpDoseSettings(data) {
     const dialog = document.createElement("dialog");
     const labels = { pump1: "Pump 1 · nutrients", pump2: "Pump 2 · pH Up", pump3: "Pump 3 · pH Down" };
     dialog.innerHTML = `<form><h2>Dose volume per activation</h2>
-      <p>Set each pump's requested dose. The Pi keeps the ${maximum.toFixed(2)} mL pulse limit, daily limits, and 1-minute mixing wait. Saving does not activate a pump.</p>
+      <p>Set each pump's requested dose. The Pi keeps the ${maximum.toFixed(2)} mL pulse limit and 1-minute mixing wait. There is no rolling 24-hour volume block. Saving does not activate a pump.</p>
       ${Object.entries(labels).map(([pump, label]) => `<label class="dose-field">${safe(label)} <input name="${pump}" type="number" inputmode="decimal" min="0.01" max="${maximum}" step="0.01" required value="${Number(settings.volumes_ml[pump]).toFixed(2)}" /> mL</label>`).join("")}
       <p class="dose-form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" data-dose-cancel class="secondary">Cancel</button><button type="submit" class="primary">Save volumes</button></div></form>`;
@@ -343,7 +343,14 @@ function renderDashboard(data) {
       <button data-mode-button class="mode" type="button"><span aria-hidden="true">⚙</span><div><span class="meta">ACTIVE MODE</span><strong>${safe(data.mode)}</strong><small>Requested: ${safe(data.requestedMode || data.mode)}</small></div></button>
     </section>
     ${data.modeOverride ? `<aside class="safety-note" role="status"><b>Safety override active</b><span>${safe(data.modeOverride)}</span></aside>` : ""}
-    ${data.pumpAutomation?.confirmationAvailable && !data.stale && data.online ? `<aside class="safety-note dose-confirmation"><div><b>Farmer confirmation required</b><span>${safe(data.pumpAutomation.recommendations.filter((item) => ["pH-Up dosing", "pH-Down dosing", "EC nutrient dosing"].includes(item)).join(", "))}</span></div><button data-confirm-dose type="button" class="primary">Confirm one dose</button></aside>` : ""}
+    ${data.pumpAutomation?.confirmationAvailable && !data.stale && data.online ? (() => {
+      const choices = [
+        ["pH-Up dosing", "pump2", "pH Up"],
+        ["pH-Down dosing", "pump3", "pH Down"],
+        ["EC nutrient dosing", "pump1", "add nutrients"]
+      ].filter(([recommendation]) => data.pumpAutomation.recommendations.includes(recommendation));
+      return `<aside class="safety-note dose-confirmation"><div><b>Farmer confirmation required</b><span>Select the specific recommended dose.</span></div><div class="dose-choice-list">${choices.map(([, pump, label]) => `<button data-confirm-dose data-pump="${pump}" data-pump-label="${label}" type="button" class="primary">${label}</button>`).join("")}</div></aside>`;
+    })() : ""}
     <section class="section-heading"><div><h2>Live readings</h2><p>${safe(sourceLabel(data))}</p></div><time datetime="${safe(data.updatedAt)}">Updated ${safe(time)}</time></section>
     <section class="sensor-grid" aria-label="Sensor readings">${data.sensors.map(renderCard).join("")}</section>
     <section class="insight-list" aria-label="System insights">
@@ -487,13 +494,16 @@ function renderHistory(data, history) {
   const recent = history.samples.slice(-6).reverse().map((sample) => `<li><time datetime="${safe(sample.timestamp)}">${safe(sample.label)}</time><strong>${safe(valueWithUnit(sample.value))}</strong></li>`).join("");
   const incidentState = (incident) => incident.state === "RESOLVED" ? "Resolved" : incident.state === "ACKNOWLEDGED" ? "Acknowledged" : "Problem detected";
   const incidents = history.incidents.map((incident) => `<li class="incident-item ${incident.tone}"><span class="incident-marker" aria-hidden="true">${incident.state === "RESOLVED" ? "✓" : incident.state === "ACKNOWLEDGED" ? "◎" : "!"}</span><div><div class="incident-title-row"><strong>${safe(incident.title)}</strong><span>${incidentState(incident)}</span></div><p>${safe(incident.message)}</p><time datetime="${safe(incident.createdAt)}">${safe(niceTime(incident.createdAt))} · ${safe(relativeAlertTime(incident.createdAt))}</time></div></li>`).join("");
+  const pumpLabel = { pump1: "Pump 1 · nutrients", pump2: "Pump 2 · pH Up", pump3: "Pump 3 · pH Down" };
+  const pumpDoses = (history.pumpDoses ?? []).slice().reverse().map((dose) => `<li class="pump-dose-item"><div><strong>${safe(pumpLabel[dose.pump] ?? dose.pump)}</strong><span>${safe(dose.action.replaceAll("_", " "))} · ${safe(dose.mode ?? "Automatic")}</span></div><b>${dose.estimatedMl === null ? "Volume unavailable" : `${formatHistoryValue(dose.estimatedMl)} mL`}</b><time datetime="${safe(dose.timestamp)}">${safe(dose.label)} · ${safe(relativeAlertTime(dose.timestamp))}</time></li>`).join("");
   const content = `<section class="page-title"><h2>History</h2><p>${safe(sourceLabel(data))}</p></section>
     <div class="filter-row" role="group" aria-label="History range">${HISTORY_RANGES.map((range) => `<button type="button" data-history-range="${range}" class="${range === history.range ? "selected" : ""}" aria-pressed="${range === history.range}">${range}</button>`).join("")}</div>
     <section class="metric-picker" aria-label="Sensor history metric">${metricButtons}</section>
     <section class="chart-card history-chart" style="--metric-color:${safe(history.color)}"><header class="chart-head"><div><p class="eyebrow">${safe(history.metricKey.replaceAll("_", " "))}</p><h2>${safe(history.title)}</h2><p>${safe(history.description)}</p></div><span class="sample-count">${history.sampleCount}<small>samples</small></span></header><svg viewBox="0 0 320 150" role="img" aria-label="${safe(history.description)}"><defs><linearGradient id="history-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--metric-color)" stop-opacity=".24"/><stop offset="1" stop-color="var(--metric-color)" stop-opacity="0"/></linearGradient></defs><path d="M20 125H304M20 90H304M20 55H304M20 20H304" stroke="#dbe6dd" stroke-dasharray="3"/>${area ? `<path d="${area}" fill="url(#history-fill)"/><path d="${chart.path}" fill="none" stroke="var(--metric-color)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><g fill="var(--surface)" stroke="var(--metric-color)" stroke-width="3">${circles}</g>` : ""}</svg>${history.values.length ? `<div class="chart-labels"><span>${safe(history.labels[0])}</span><span>${safe(history.labels[Math.floor(history.labels.length / 2)])}</span><span>${safe(history.labels.at(-1))}</span></div>` : `<div class="no-chart-data"><strong>No ${safe(history.title.toLowerCase())} data yet</strong><span>This sensor has no calibrated samples in the selected range.</span></div>`}</section>
     <section class="history-stats" aria-label="${safe(history.title)} summary"><article><span>Current</span><strong>${safe(valueWithUnit(history.current))}</strong></article><article><span>Average</span><strong>${safe(valueWithUnit(history.average))}</strong></article><article><span>Range</span><strong>${safe(valueWithUnit(history.minimum))} – ${safe(valueWithUnit(history.maximum))}</strong></article></section>
     <section class="recent-readings"><header><div><h2>Recent readings</h2><p>Newest valid samples in this range</p></div><span>${safe(history.unit || "Value")}</span></header>${recent ? `<ol>${recent}</ol>` : `<div class="empty-inline"><strong>No readings available</strong><span>Values will appear after the backend records valid measurements.</span></div>`}</section>
-    <section class="incident-timeline"><header><div><h2>Problem timeline</h2><p>Detected problems and recorded recoveries</p></div><span>${history.incidents.length} event${history.incidents.length === 1 ? "" : "s"}</span></header>${incidents ? `<ol>${incidents}</ol>` : `<div class="empty-inline"><strong>No problem transitions in this range</strong><span>Sensor, vision, fusion, and system incidents will appear when they are detected or resolved.</span></div>`}</section>`;
+    <section class="incident-timeline"><header><div><h2>Problem timeline</h2><p>Detected problems and recorded recoveries</p></div><span>${history.incidents.length} event${history.incidents.length === 1 ? "" : "s"}</span></header>${incidents ? `<ol>${incidents}</ol>` : `<div class="empty-inline"><strong>No problem transitions in this range</strong><span>Sensor, vision, fusion, and system incidents will appear when they are detected or resolved.</span></div>`}</section>
+    <section class="incident-timeline pump-history"><header><div><h2>Pump dosing history</h2><p>Pump 1 nutrients, Pump 2 pH Up, and Pump 3 pH Down</p></div><span>${history.pumpDoses?.length ?? 0} dose${(history.pumpDoses?.length ?? 0) === 1 ? "" : "s"}</span></header>${pumpDoses ? `<ol>${pumpDoses}</ol>` : `<div class="empty-inline"><strong>No pump doses in this range</strong><span>Completed automatic and farmer-confirmed doses will appear here.</span></div>`}</section>`;
   app.innerHTML = renderShell(content, data);
   document.querySelectorAll("[data-history-range]").forEach((button) => button.addEventListener("click", () => {
     historyRange = HISTORY_RANGES.includes(button.dataset.historyRange) ? button.dataset.historyRange : "Today";

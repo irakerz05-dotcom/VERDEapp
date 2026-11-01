@@ -85,6 +85,7 @@ def evaluate_live(selected_mode, snapshot, water, plant, camera, limits,
             holds.append(name + " reading not fresh")
         if str(sensor.get("classification") or "").upper() == "CRITICAL":
             faults.append(name + " Critical")
+            circulation_stop_reasons.append(name + " Critical")
         value = sensor.get(field)
         numeric_critical = (
             (name == "ph" and _finite(value) and (value < 4.5 or value > 8.0))
@@ -94,8 +95,11 @@ def evaluate_live(selected_mode, snapshot, water, plant, camera, limits,
         )
         if numeric_critical and name + " Critical" not in faults:
             faults.append(name + " Critical")
+        if numeric_critical and name + " Critical" not in circulation_stop_reasons:
+            circulation_stop_reasons.append(name + " Critical")
     if _value(water) == "Critical":
         faults.append("water quality Critical")
+        circulation_stop_reasons.append("water quality Critical")
     if _status(plant) == "FAULT / ERROR" or (isinstance(camera, dict)
                                               and camera.get("status") == "FAULT / ERROR"):
         faults.append("Faulty Vision")

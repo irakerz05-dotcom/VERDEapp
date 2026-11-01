@@ -18,7 +18,6 @@ MAX_SAMPLE_AGE_SECONDS = 65.0
 ASSUMED_FLOW_ML_PER_SECOND = 0.82
 MAX_RUN_SECONDS = 4.5  # 3.69 mL at 0.82 mL/s, scaled from the 20 L proposal.
 DOSE_VOLUME_ML = ASSUMED_FLOW_ML_PER_SECOND * MAX_RUN_SECONDS
-COURSE_LIMIT_ML = {"pump1": 9.0, "pump2": 5.274, "pump3": 3.69}
 PUMP_BY_ACTION = {
     "nutrient_dosing": "pump1",  # GPIO27
     "ph_up": "pump2",           # GPIO22
@@ -68,7 +67,7 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
            snapshot_age_seconds, water_class, camera_fault, vision_fault,
            last_dose_elapsed_seconds, calibrated_dose_seconds,
            circulation_flow_gpio_level, dosed_ml_by_pump=None,
-           farmer_confirmed=False):
+           farmer_confirmed=False, requested_pump=None):
     """Return a proposed action; no state or hardware is changed.
 
     ``request_full`` represents a fresh farmer action after an override. Merely
@@ -120,7 +119,10 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
                               if unready else None)
     # The NC contact may reverse the load behavior relative to a NO contact.
     # GPIO24 is not driven until its actual flow level is physically verified.
-    stop_for_fault = bool(stale or faulty or camera_fault or vision_fault)
+    # Critical water conditions are also a circulation stop.  The service
+    # switches to Semi-Automation for the same safety override, and only a
+    # fresh, normal evaluation may return to the farmer's requested mode.
+    stop_for_fault = bool(stale or faulty or camera_fault or vision_fault or critical)
     circulation = ("BLOCKED: polarity unverified" if circulation_flow_gpio_level is None
                    else "STOP" if stop_for_fault else "RUN")
     circulation_gpio_level = (None if circulation_flow_gpio_level is None else
@@ -149,20 +151,19 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
         elif ec < 1.2:
             action = "nutrient_dosing"
         # High EC has no deterministic correction pump.
+        if requested_pump is not None and pump != requested_pump:
+            action = pump = None
         if action:
             pump = PUMP_BY_ACTION[action]
             duration = calibrated_dose_seconds.get(pump) if isinstance(calibrated_dose_seconds, dict) else None
-            prior_ml = (dosed_ml_by_pump or {}).get(pump) if isinstance(dosed_ml_by_pump, dict) else None
-            remaining_ml = (COURSE_LIMIT_ML[pump] - prior_ml
-                            if _finite(prior_ml) and prior_ml >= 0 else 0.0)
             mixed = (last_dose_elapsed_seconds is None
                      or (_finite(last_dose_elapsed_seconds)
                          and last_dose_elapsed_seconds >= MIX_SECONDS))
-            if (not mixed or remaining_ml <= 0 or not _finite(duration)
+            if (not mixed or not _finite(duration)
                     or not 0 < duration <= MAX_RUN_SECONDS):
                 action = pump = None
             else:
-                next_ml = min(DOSE_VOLUME_ML, remaining_ml,
+                next_ml = min(DOSE_VOLUME_ML,
                               float(duration) * ASSUMED_FLOW_ML_PER_SECOND)
                 seconds = next_ml / ASSUMED_FLOW_ML_PER_SECOND
                 dose_ml = next_ml

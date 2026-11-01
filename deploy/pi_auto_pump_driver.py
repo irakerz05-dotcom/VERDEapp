@@ -30,7 +30,7 @@ FLOW_ML_PER_SECOND = 0.82
 MIX_SECONDS = 60.0
 WINDOW_SECONDS = 24 * 60 * 60
 MAX_AUTO_SECONDS = 4.5
-LIMITS_ML = {"pump1": 9.0, "pump2": 5.274, "pump3": 3.69}
+PUMPS = ("pump1", "pump2", "pump3")
 ARM_RECORD = "GPIO24 HIGH=FLOW LOW=STOP; 18L\n"
 
 
@@ -82,7 +82,7 @@ def load_state(clock):
         raise RuntimeError("Pump state is invalid; dosing blocked")
     events = []
     for event in data["events"]:
-        if (not isinstance(event, dict) or event.get("pump") not in LIMITS_ML
+        if (not isinstance(event, dict) or event.get("pump") not in PUMPS
                 or not isinstance(event.get("at"), (int, float))
                 or not math.isfinite(event["at"])
                 or not isinstance(event.get("ml"), (int, float))
@@ -96,7 +96,7 @@ def load_state(clock):
 
 def totals(data):
     return {pump: sum(event["ml"] for event in data["events"]
-                      if event["pump"] == pump) for pump in LIMITS_ML}
+                      if event["pump"] == pump) for pump in PUMPS}
 
 
 def last_elapsed(data, clock):
@@ -128,7 +128,7 @@ def status(controller, data, clock):
         "ml_in_last_24h": totals(data),
         "last_dose_elapsed_seconds": last_elapsed(data, clock),
         "in_progress": data["in_progress"],
-        "limits_ml_in_24h": LIMITS_ML,
+        "limits_ml_in_24h": None,
     }
 
 
@@ -145,8 +145,6 @@ def dose(controller, data, clock, pump, seconds):
     if elapsed is not None and elapsed < MIX_SECONDS:
         raise RuntimeError("The 60-second mixing wait has not elapsed")
     volume = FLOW_ML_PER_SECOND * seconds
-    if totals(data)[pump] + volume > LIMITS_ML[pump] + 1e-9:
-        raise RuntimeError("Pump's rolling 24-hour volume limit would be exceeded")
     controller.require_dosing_off()
     data["events"].append({"pump": pump, "at": clock, "ml": volume})
     data["in_progress"] = True
@@ -178,7 +176,7 @@ def main():
     circulation = commands.add_parser("circulation")
     circulation.add_argument("state", choices=("run", "stop"))
     dosing = commands.add_parser("dose")
-    dosing.add_argument("pump", choices=LIMITS_ML)
+    dosing.add_argument("pump", choices=PUMPS)
     dosing.add_argument("seconds", type=float)
     args = parser.parse_args()
     controller = protected_controller()

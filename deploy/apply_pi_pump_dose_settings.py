@@ -14,13 +14,13 @@ from pathlib import Path
 ROOT = Path("/home/verde/VERDE-Sensor-Integration")
 GATEWAY = "/usr/local/libexec/verde_auto_pumps.py"
 EXPECTED_RUNTIME = "cbe7cbccc6fc55adbfaf97fca5b9c337c8195cd9542bbe8deb90708cc3458081"
-SERVICE_ANCHOR = '''    def confirm(self):
+SERVICE_ANCHOR = '''    def confirm(self, requested_pump=None):
         with self.lock:
             if self.selected_mode != SEMI:
                 return Result("BLOCKED — SEMI MODE REQUIRED").as_dict()
             fresh_state = self.tick()
             live_snapshot = self.sensor_snapshot()
-            result = self.actuators.confirm(fresh_state, live_snapshot)
+            result = self.actuators.confirm(fresh_state, live_snapshot, requested_pump)
             self.event("actuator", result.status, result.as_dict())
             return result.as_dict()'''
 SERVICE_NEW = SERVICE_ANCHOR + '''
@@ -33,7 +33,8 @@ SERVICE_NEW = SERVICE_ANCHOR + '''
             self.event("pump_dose_settings", "Pump dose volumes updated", {"volumes_ml": saved})
             return {"volumes_ml": saved}'''
 WEB_ANCHOR = '''                if path == "/api/confirm":
-                    result = service.confirm()
+                    requested_pump = body.get("pump")
+                    result = service.confirm(requested_pump)
                     return self.reply(200 if result.get("status") == "DOSED" else 409, result)'''
 WEB_NEW = '''                if path == "/api/pump/dose-settings":
                     try:

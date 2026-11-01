@@ -52,7 +52,7 @@ class LiveModeTests(unittest.TestCase):
         live = snapshot()
         live["sensors"]["ph"]["classification"] = "CRITICAL"
         self.assertEqual(decide(snapshot=live)["active_mode"], SEMI)
-        self.assertFalse(decide(snapshot=live)["circulation_stop_required"])
+        self.assertTrue(decide(snapshot=live)["circulation_stop_required"])
         self.assertTrue(decide(camera={"status": "FAULT / ERROR"})["override"])
         self.assertTrue(decide(camera={"status": "FAULT / ERROR"})["circulation_stop_required"])
         self.assertTrue(decide(water=SimpleNamespace(value="Critical", status="EXPERIMENTAL"))["override"])
@@ -86,7 +86,7 @@ class LiveModeTests(unittest.TestCase):
         live["sensors"]["ph"]["value"] = 8.5
         result = decide(snapshot=live)
         self.assertTrue(result["override"])
-        self.assertFalse(result["circulation_stop_required"])
+        self.assertTrue(result["circulation_stop_required"])
 
     def test_paper_ph_recommendations_when_local_limits_are_null(self):
         low = snapshot()

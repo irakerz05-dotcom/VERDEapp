@@ -22,19 +22,20 @@ SERVICE_OLD = '''    def confirm(self):
             result = self.actuators.request("Farmer confirmed recommendation")
             self.event("actuator", result.status, result.as_dict())
             return result.as_dict()'''
-SERVICE_NEW = '''    def confirm(self):
+SERVICE_NEW = '''    def confirm(self, requested_pump=None):
         with self.lock:
             if self.selected_mode != SEMI:
                 return Result("BLOCKED — SEMI MODE REQUIRED").as_dict()
             fresh_state = self.tick()
             live_snapshot = self.sensor_snapshot()
-            result = self.actuators.confirm(fresh_state, live_snapshot)
+            result = self.actuators.confirm(fresh_state, live_snapshot, requested_pump)
             self.event("actuator", result.status, result.as_dict())
             return result.as_dict()'''
 WEB_OLD = '''                if path == "/api/confirm":
                     return self.reply(409, service.confirm())'''
 WEB_NEW = '''                if path == "/api/confirm":
-                    result = service.confirm()
+                    requested_pump = body.get("pump")
+                    result = service.confirm(requested_pump)
                     return self.reply(200 if result.get("status") == "DOSED" else 409, result)'''
 
 

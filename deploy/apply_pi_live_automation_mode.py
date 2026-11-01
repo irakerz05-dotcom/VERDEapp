@@ -22,14 +22,6 @@ CALL_NEW = '''            # VERDE-LIVE-AUTOMATION-MODE-v1; hardware outputs rema
             automation = evaluate_live(
                 self.selected_mode, live_snapshot, experimental_water, plant, camera,
                 self.config["limits"], bool(self.database_error))
-            if automation["override"] and self.selected_mode == FULL:
-                self.selected_mode = SEMI
-                self.event("mode", "Safety override selected Semi-Automation", {
-                    "reason": automation["override_reason"],
-                })
-                automation = evaluate_live(
-                    self.selected_mode, live_snapshot, experimental_water, plant, camera,
-                    self.config["limits"], bool(self.database_error))'''
 
 
 def replace_once(source, old, new, name):

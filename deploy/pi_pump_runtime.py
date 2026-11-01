@@ -74,8 +74,10 @@ class PumpRuntime:
     def update_dose_settings(self, volumes):
         return save_dose_settings(volumes)
 
-    def confirm(self, state, live_snapshot):
+    def confirm(self, state, live_snapshot, requested_pump=None):
         """Run one farmer-confirmed Semi dose after a fresh service tick."""
+        if requested_pump not in (None, "pump1", "pump2", "pump3"):
+            return Result("BLOCKED — UNKNOWN PUMP SELECTION")
         automation = state.get("automation", {}) if isinstance(state, dict) else {}
         if automation.get("active_mode") != SEMI:
             return Result("BLOCKED — SEMI MODE REQUIRED")
@@ -107,14 +109,19 @@ class PumpRuntime:
                 circulation_flow_gpio_level="HIGH",
                 dosed_ml_by_pump=gateway.get("ml_in_last_24h"),
                 farmer_confirmed=True,
+                requested_pump=requested_pump,
             )
             if proposal.pump is None:
                 return Result("BLOCKED — NO ELIGIBLE DOSE",
-                              detail=proposal.reason or "Target, mixing wait, or volume limit")
+                              detail=proposal.reason or "Selected pump is not currently recommended, or the mixing wait is active")
             if gateway.get("circulation") != "RUN":
                 self.command("circulation", "run")
             result = self.command("dose", proposal.pump, f"{proposal.dose_seconds:.8f}")
-            return Result("DOSED", value=result,
+            return Result("DOSED", value={**result, "mode": SEMI,
+                                          "pump": proposal.pump,
+                                          "action": proposal.dose_action,
+                                          "requested_seconds": proposal.dose_seconds,
+                                          "estimated_ml": proposal.dose_ml},
                           detail=f"Farmer confirmed {proposal.dose_action}")
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
             stopped = self.all_off(str(exc))
@@ -168,6 +175,7 @@ class PumpRuntime:
                 calibrated_dose_seconds=dose_durations(volumes),
                 circulation_flow_gpio_level="HIGH",
                 dosed_ml_by_pump=gateway.get("ml_in_last_24h"),
+                requested_pump=None,
             )
             if decision.override_latched:
                 raise RuntimeError(decision.reason or "Pump safety override")

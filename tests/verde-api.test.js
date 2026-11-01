@@ -513,6 +513,19 @@ test("backend events are converted to safe alert presentation data", () => {
   assert.equal(alerts[4].title, "Vision acknowledged");
 });
 
+test("pump actuator events appear in history with their selected pump", () => {
+  const now = new Date("2026-09-25T12:00:00Z");
+  const history = normalizeBackendHistory([], "24 Hours", now, null, [{
+    id: 20, timestamp: "2026-09-25T11:30:00Z", category: "actuator",
+    message: "Automatic dose completed",
+    payload: { mode: "Full Automation Mode", pump: "pump2", action: "ph_up",
+      requested_seconds: 2, estimated_ml: 1.64 }
+  }]);
+  assert.equal(history.pumpDoses.length, 1);
+  assert.equal(history.pumpDoses[0].pump, "pump2");
+  assert.equal(history.pumpDoses[0].estimatedMl, 1.64);
+});
+
 test("harvest detection is a notification, never a vision warning", () => {
   const [notice] = normalizeBackendEvents([{
     id: 12, timestamp: "2026-10-28T07:12:00+08:00",
@@ -560,6 +573,18 @@ test("farmer dose confirmation uses the protected backend route and reports a bl
   assert.equal(calls[1].url, "/api/confirm");
   assert.equal(calls[1].options.headers["X-VERDE-Token"], "test-token");
   assert.deepEqual(JSON.parse(calls[1].options.body), {});
+});
+
+test("farmer dose confirmation can select one pump", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/api/session")) return { ok: true, status: 200, json: async () => ({ token: "test-token" }) };
+    return { ok: true, status: 200, json: async () => ({ status: "DOSED" }) };
+  };
+  const api = new VerdeApi({ fetchImpl });
+  await api.confirmDose("pump3");
+  assert.deepEqual(JSON.parse(calls[1].options.body), { pump: "pump3" });
 });
 
 test("pump dose settings use the authenticated route and preserve per-pump volumes", async () => {

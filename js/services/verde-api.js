@@ -535,7 +535,7 @@ function historyDescription(metric, range) {
   return `${metric.label} samples ${period}`;
 }
 
-function historyView(range, metrics, selectedMetric, incidents = []) {
+function historyView(range, metrics, selectedMetric, incidents = [], pumpDoses = []) {
   const requested = metrics.find((metric) => metric.key === selectedMetric);
   const selected = requested ?? metrics.find((metric) => metric.sampleCount) ?? metrics[0];
   return {
@@ -554,7 +554,8 @@ function historyView(range, metrics, selectedMetric, incidents = []) {
     minimum: selected.minimum,
     maximum: selected.maximum,
     average: selected.average,
-    incidents
+    incidents,
+    pumpDoses
   };
 }
 
@@ -571,7 +572,12 @@ export function normalizeBackendHistory(rows, range = "Today", now = new Date(),
     (event.state === "OPEN" || event.state === "RESOLVED")
     && Number.isFinite(Date.parse(event.createdAt))
     && Date.parse(event.createdAt) >= start);
-  return historyView(selectedRange, metrics, selectedMetric, incidents);
+  const pumpDoses = normalizeBackendEvents(eventRows)
+    .filter((event) => event.pumpDose && Number.isFinite(Date.parse(event.createdAt))
+      && Date.parse(event.createdAt) >= start)
+    .map((event) => ({ ...event.pumpDose, timestamp: event.createdAt,
+      label: historyLabel(event.createdAt, selectedRange) }));
+  return historyView(selectedRange, metrics, selectedMetric, incidents, pumpDoses);
 }
 
 function eventPayload(value) {
@@ -588,6 +594,8 @@ export function normalizeBackendEvents(rows) {
   return (Array.isArray(rows) ? rows : []).map((row) => {
     const category = String(row.category ?? "event");
     const payload = eventPayload(row.payload);
+    const dosePayload = payload.value && typeof payload.value === "object"
+      && !Array.isArray(payload.value) ? { ...payload, ...payload.value } : payload;
     const state = payload.state
       ?? (category === "problem_resolved" ? "RESOLVED"
         : category === "problem_acknowledged" ? "ACKNOWLEDGED"
@@ -616,7 +624,15 @@ export function normalizeBackendEvents(rows) {
       icon: notice ? "◉" : resolved ? "✓" : acknowledged ? "◎" : danger ? "!" : warning ? "△" : "◉",
       title,
       message: row.message ?? "Backend event",
-      createdAt: row.timestamp
+      createdAt: row.timestamp,
+      pumpDose: category === "actuator" && ["pump1", "pump2", "pump3"].includes(dosePayload.pump)
+        ? {
+          pump: dosePayload.pump,
+          action: dosePayload.action ?? "dose",
+          mode: dosePayload.mode ?? null,
+          requestedSeconds: finiteNumber(dosePayload.requested_seconds),
+          estimatedMl: finiteNumber(dosePayload.estimated_ml)
+        } : null
     };
   });
 }
@@ -777,14 +793,14 @@ export class VerdeApi {
     };
   }
 
-  async confirmDose() {
+  async confirmDose(pump = null) {
     const post = async (refreshToken = false) => this.request("/api/confirm", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-VERDE-Token": await this.sessionToken(refreshToken)
       },
-      body: JSON.stringify({})
+      body: JSON.stringify(pump ? { pump } : {})
     });
     try {
       return await post(false);
@@ -922,7 +938,7 @@ export class MockVerdeApi {
         value
       }))));
     const incidents = normalizeBackendEvents(mockEventRows()).filter((event) => event.state);
-    return this.respond(historyView(selected.range, metrics, selectedMetric, incidents));
+    return this.respond(historyView(selected.range, metrics, selectedMetric, incidents, []));
   }
 
   async getAlerts() {

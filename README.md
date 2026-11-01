@@ -544,8 +544,9 @@ sudo systemctl restart verde.service
 The installer backs up `app/service.py`, validates exact source anchors,
 and never writes GPIO. Physical outputs remain disabled. A Critical water
 condition, persistent required-sensor fault, stale acquisition, camera fault,
-or plant-model fault moves a requested Full mode to Semi. The farmer must
-select Full again after the condition clears. Humidity is excluded from this
+or plant-model fault moves a requested Full mode to Semi and stops circulation.
+When the condition clears, the previously requested Full mode becomes active
+again. Humidity is excluded from this
 override. Temporary recovery or no plant detection holds dosing eligibility
 without treating either as a confirmed hardware fault.
 
@@ -556,18 +557,17 @@ requires an explicit dose duration and physically verified GPIO24 flow level.
 as shared-model estimates, and the corrected 18 L operating reservoir. Those values
 do not activate pumps or establish a chemical dose.
 
-The provisional 18 L limits are 5.274 mL pH Up (Pump 2),
-3.69 mL pH Down (Pump 3), or 9 mL nutrients (Pump 1). Each decision proposes
-at most 3.69 mL over 4.5 seconds at the assumed 0.82 mL/s rate. These
-limits are the earlier 20 L amounts multiplied by 18/20. The last run
-of a course is shortened to its remaining allowance. The next
-decision must wait 60 seconds after the previous dose and use a fresh reading;
-it stops when the target range is reached or the course limit is spent.
+The corrected 18 L operating reservoir allows each pump to request at most
+3.69 mL over 4.5 seconds at the assumed 0.82 mL/s rate. There is no rolling
+24-hour volume limit; the next decision must still wait 60 seconds after the
+previous dose and use a fresh reading, and it stops when the target range is
+reached.
 The pH course amounts are arithmetic estimates from the sequential 2 L test,
 not verified doses for the 18 L reservoir. A Critical reading, including
-pH 8.5 or EC 0.3 mS/cm, overrides to Semi and blocks automatic dosing.
-The policy requires recorded cumulative volume to enforce its limits; a
-missing record blocks dosing. Physical control remains disabled until the
+pH 8.5 or EC 0.3 mS/cm, overrides to Semi, stops circulation, and blocks
+automatic dosing. The gateway enforces one-pump-at-a-time, the 4.5-second
+pulse cap, and the 60-second mixing wait; it does not impose a rolling
+24-hour volume block. Physical control remains disabled until the
 existing manual pump controller can be invoked securely and GPIO24's actual
 flow and stop behavior has been checked with the NC load.
 
@@ -588,9 +588,7 @@ installer, `deploy/install_pi_auto_pump_gateway.py`, copies the existing
 manual controller to a root-owned directory and adds a scoped service command
 path. It starts disarmed and changes no GPIO. Its root-owned ledger enforces
 one dosing command at a time, at most 4.5 seconds per automatic command,
-at least one minute between completed doses, and rolling 24-hour limits of
-9 mL nutrients, 5.274 mL pH Up, and 3.69 mL pH Down at the assumed
-0.82 mL/s flow. An
+and at least one minute between completed doses. An
 interrupted dose remains blocked pending manual inspection. Arming requires
 the circulation pump reconnected and actual flow observed; the web service
 uses the installed pump runtime while the gateway remains disarmed.
@@ -601,12 +599,12 @@ the guarded decision and runtime modules, and does not restart the service.
 On restart, the service requests dosing pins OFF and circulation STOP, then
 reports a Semi-Automation safety override while the gateway is disarmed.
 Armed operation uses the integrated live sensor snapshot, respects the
-60-second mixing wait and root-owned 24-hour volume ledger, and runs
-circulation at GPIO24 HIGH in both modes. A Faulty Sensor, Faulty Vision,
-stale acquisition, or system fault requires GPIO24 LOW/STOP; a Critical
-reading alone selects Semi-Automation and holds automatic dosing while
-circulation keeps mixing. Temporary unclassified vision holds dosing without
-stopping circulation.
+60-second mixing wait and root-owned dose history, and runs
+circulation at GPIO24 HIGH in normal operation. A Critical reading, Faulty
+Sensor, Faulty Vision, stale acquisition, or system fault requires GPIO24
+LOW/STOP and selects Semi-Automation. Temporary unclassified vision holds
+dosing without stopping circulation. When the condition clears, the requested
+Full mode can resume.
 
 `deploy/apply_pi_circulation_policy.py` updates those three policy modules in
 one guarded transaction. It accepts only the reviewed installed module hashes
@@ -615,17 +613,17 @@ and backs up each file before editing. The gateway remains disarmed.
 `deploy/apply_pi_pump_confirmation.py` adds a guarded `/api/confirm` action
 for one farmer-confirmed dose in Semi-Automation. It rechecks a fresh integrated
 sensor snapshot, correction eligibility, circulation state, the one-minute
-mixing wait, and the root-owned volume ledger immediately before requesting
-the existing pump controller. The dashboard shows a confirmation button only
-when the backend reports an eligible recommendation. The protected gateway
+mixing wait, and the root-owned dose history immediately before requesting
+the existing pump controller. The dashboard shows one confirmation button
+for each eligible recommendation so the farmer can select pH Up, pH Down, or
+nutrients individually. The protected gateway
 still rejects every dose while disarmed. The installer backs up each changed
 Pi file and never arms the gateway or switches a pump.
 
 The user subsequently corrected the operating reservoir to 18 L. The
-provisional per-dose and 24-hour limits use 18/20 of the original 20 L
-proposal: one pulse is at most 3.69 mL over 4.5 seconds; the rolling limits
-are 9 mL nutrients, 5.274 mL pH Up, and 3.69 mL pH Down. These are upper
-bounds, not a predicted correction. The earlier 12.5 L installer is retired.
+provisional per-dose limit uses 18/20 of the original 20 L
+proposal: one pulse is at most 3.69 mL over 4.5 seconds. This is an upper
+bound, not a predicted correction. The earlier 12.5 L installer is retired.
 To update the protected Pi gateway, put the service in Semi-Automation, use its
 interactive `disarm` command, run `deploy/install_pi_auto_pump_gateway.py`,
 then apply `deploy/apply_pi_reservoir_18.py` and restart `verde.service`.
@@ -655,7 +653,7 @@ and at most 3.69 mL for each pump. The values persist in
 `/home/verde/VERDE-Sensor-Integration/pump_dose_settings.json`; saving never
 activates a pump. The service converts each target using the provisional
 0.82 mL/s rate and still applies the protected gateway's 4.5-second pulse,
-rolling 24-hour limits, one-pump-at-a-time rule, and 60-second mixing wait.
+one-pump-at-a-time rule and 60-second mixing wait.
 The installer checks the reviewed 18 L runtime, backs up every changed backend
 file, and requires the gateway to be disarmed before applying. After restarting
 the service, physically verify circulation and arm the gateway again.

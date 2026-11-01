@@ -98,3 +98,5 @@ dialog .dose-form-error { color:#a32c27;font-size:.78rem;font-weight:700;margin:
   .history-stats { grid-template-columns:1fr; }.history-stats article { display:flex;align-items:center;justify-content:space-between;gap:12px; }.history-stats strong { margin-top:0;text-align:right; }
   .alert-summary article { display:grid;justify-items:center;padding:12px 6px; }.alert-summary span { font-size:.61rem; }.alert-title-row { display:block; }.severity { display:inline-block;margin-top:7px; }.page-title-split { align-items:flex-start; }.read-only-label { margin-top:2px; }
 }
+.dose-choice-list { display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end; }.dose-choice-list button { white-space:nowrap; }
+.pump-history { margin-top:16px; }.pump-dose-item { display:grid;grid-template-columns:1fr auto;gap:3px 12px;padding:12px 2px;border-bottom:1px solid #edf1ed; }.pump-dose-item:last-child { border-bottom:0;padding-bottom:2px; }.pump-dose-item strong,.pump-dose-item b { font-size:.8rem; }.pump-dose-item span,.pump-dose-item time { color:var(--muted);font-size:.68rem; }.pump-dose-item time { grid-column:1 / -1; }

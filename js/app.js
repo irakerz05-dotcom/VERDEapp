@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=62";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=62";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=63";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=63";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -344,19 +344,22 @@ function correctionGuidance(data) {
     ["pH-Down dosing", "pump3", "pH Down", "pH", "5.5–6.5"],
     ["EC nutrient dosing", "pump1", "Nutrients", "EC", "1.2–1.8 mS/cm"]
   ].filter(([recommendation]) => recommendations.includes(recommendation));
+  const critical = data.sensors.some((sensor) => /critical/i.test(sensor.status))
+    || /critical/i.test(data.waterQuality?.status ?? "");
   const sensorReading = (name) => {
     const sensor = data.sensors.find((item) => item.label === name);
     const value = Number(sensor?.value);
     return sensor && Number.isFinite(value) && !["Recovering", "Faulty Sensors", "Stale"].includes(sensor.status)
       ? `${sensor.value}${sensor.unit ? ` ${sensor.unit}` : ""}` : "Unavailable";
   };
-  const actions = choices.map(([, pump, label, sensor, target]) => `<li><strong>Pump ${pump.slice(-1)} · ${safe(label)}</strong><span>Current ${safe(sensor)}: ${safe(sensorReading(sensor))} · Optimal ${safe(target)}</span></li>`).join("");
+  const actions = choices.map(([, pump, label, sensor, target]) => `<li><strong>${critical ? "Manual correction requested: " : ""}Pump ${pump.slice(-1)} · ${safe(label)}</strong><span>Current ${safe(sensor)}: ${safe(sensorReading(sensor))} · Optimal ${safe(target)}</span></li>`).join("");
   const highEc = recommendations.includes("High EC: manual inspection; correction procedure pending")
     ? "<li><strong>High EC · manual inspection</strong><span>No automatic correction pump is configured for high EC.</span></li>" : "";
   const canConfirm = data.pumpAutomation?.confirmationAvailable === true;
   const buttons = canConfirm ? `<div class="dose-choice-list">${choices.map(([, pump, label]) => `<button data-confirm-dose data-pump="${pump}" data-pump-label="${safe(label)}" type="button" class="primary">Confirm ${safe(label)}</button>`).join("")}</div>` : "";
+  const manualRequest = critical ? `<p class="correction-request"><strong>Manual correction required for Critical readings.</strong> ${choices.length ? "The pumps named below indicate which solution is needed. Correct one condition at a time under supervision and remeasure after mixing." : "No dosing pump is recommended from the available readings; inspect the Critical condition."}</p>` : "";
   const blocked = data.pumpAutomation?.circulationStopRequired
-    ? "Critical or faulty condition: circulation and app dosing are stopped. Verify and correct the water under supervision, then recheck the sensors and rearm circulation when safe."
+    ? "Critical or faulty condition: circulation and app dosing are stopped. Perform any manual correction outside the app, then recheck the sensors and rearm circulation when safe."
     : /DISARMED/i.test(data.pumpAutomation?.hardwareStatus ?? "")
       ? "The pump gateway is disarmed. A supervised circulation flow check and rearm are required before app dosing."
       : canConfirm ? "Choose one recommended pump; the Pi checks live readings again before dosing."
@@ -366,6 +369,7 @@ function correctionGuidance(data) {
     ? "Requested Full Automation resumes after recovery if the gateway remains armed."
     : "After recovery, select Full Automation to resume automatic dosing.";
   return `<section class="correction-plan" aria-label="Live correction guidance"><header><div><p class="eyebrow">LIVE CORRECTION GUIDANCE</p><h2>What the readings need</h2></div><a href="#History">View pump dosing history</a></header>
+    ${manualRequest}
     ${actions || highEc ? `<ul>${actions}${highEc}</ul>` : `<p>No pH or EC pump correction is recommended from these readings.</p>`}
     <p class="correction-hold">${safe(blocked)} ${safe(fullMode)}</p>${buttons}</section>`;
 }
@@ -756,7 +760,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=62", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=63", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

@@ -76,8 +76,8 @@ class PumpRuntime:
 
     def confirm(self, state, live_snapshot, requested_pump=None):
         """Run one farmer-confirmed Semi dose after a fresh service tick."""
-        if requested_pump not in (None, "pump1", "pump2", "pump3"):
-            return Result("BLOCKED — UNKNOWN PUMP SELECTION")
+        if requested_pump not in ("pump1", "pump2", "pump3"):
+            return Result("BLOCKED — SELECT ONE PUMP")
         automation = state.get("automation", {}) if isinstance(state, dict) else {}
         if automation.get("active_mode") != SEMI:
             return Result("BLOCKED — SEMI MODE REQUIRED")
@@ -138,7 +138,6 @@ class PumpRuntime:
             if gateway.get("in_progress"):
                 raise RuntimeError("An interrupted dose needs manual inspection")
             if gateway.get("armed") is not True:
-                output["selected_mode"] = SEMI
                 output["active_mode"] = SEMI
                 output["override"] = True
                 output["override_reason"] = "Pump controller is disarmed"
@@ -151,7 +150,7 @@ class PumpRuntime:
                 self.command("safe-off")
                 output["actuation_enabled"] = False
                 output["confirmation_available"] = False
-                output["hardware_status"] = "FAULT OVERRIDE — PUMPS STOPPED"
+                output["hardware_status"] = "SAFETY OVERRIDE — PUMPS STOPPED"
                 output["outputs"] = {name: "OFF" for name in OUTPUTS}
                 return output
             if automation.get("override"):
@@ -200,7 +199,6 @@ class PumpRuntime:
             return output
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
             stopped = self.all_off(str(exc))
-            output["selected_mode"] = SEMI
             output["active_mode"] = SEMI
             output["override"] = True
             output["override_reason"] = f"Pump controller fault: {exc}"

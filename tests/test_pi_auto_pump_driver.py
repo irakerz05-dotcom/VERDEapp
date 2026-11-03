@@ -10,6 +10,8 @@ from deploy import pi_auto_pump_driver as driver
 
 
 class FakeController:
+    DOSING_PINS = {"pump1": 27, "pump2": 22, "pump3": 23}
+
     def __init__(self):
         self.dose_calls = []
 

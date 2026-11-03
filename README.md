@@ -637,8 +637,9 @@ adds pH 5.5–6.5 and EC 1.2–1.8 recommendation fallbacks when local limits ar
 null, matching the existing automatic decision thresholds. After a successful
 Full-Automation dose, it records a structured `actuator` event in the system
 database with pump, action, requested duration, estimated volume, and sensor
-sample timestamp. A failed event write selects Semi-Automation and requests
-all pumps OFF. The guarded installer backs up changed files and requires the
+sample timestamp. A failed event write makes Semi-Automation active and requests
+all pumps OFF; the requested Full mode is retained for recovery after database
+logging succeeds again. The guarded installer backs up changed files and requires the
 gateway to be disarmed. Critical readings still override to Semi-Automation;
 Objective 6's automatic pH-Up test therefore uses 4.5 ≤ pH < 5.5, and
 Objective 7's automatic pH-Down test uses 6.5 < pH ≤ 8.0, with other required
@@ -657,3 +658,40 @@ one-pump-at-a-time rule and 60-second mixing wait.
 The installer checks the reviewed 18 L runtime, backs up every changed backend
 file, and requires the gateway to be disarmed before applying. After restarting
 the service, physically verify circulation and arm the gateway again.
+
+The pump policy update in `deploy/apply_pi_pump_policy_v2.py` retains the farmer's
+requested Full mode during a Critical, Faulty Sensor, Faulty Vision, stale
+sample, or controller override. The active mode becomes Semi and circulation
+stops. Once the next fresh evaluation clears the fault, Full mode and
+circulation resume automatically if Full was requested. A farmer-selected Semi
+mode stays Semi. A farmer-confirmed dose requires an explicit selection of one
+currently recommended pump; Critical and faulty conditions block dosing. Pump
+1/2/3 doses are available in History through `/api/pump/history`, including
+older events beyond the general event feed's last 30 rows. Dose volumes shown
+there are estimates from the assumed flow rate, not measured delivery.
+
+For the installed Pi at commit `abe6b12`, update the disarmed gateway and
+backend while someone watches circulation:
+
+```bash
+cd ~/VERDEapp
+git pull --ff-only origin feature/android-pwa-install
+python3 deploy/install_pi_auto_pump_gateway.py --check
+python3 deploy/apply_pi_pump_policy_v2.py --check
+sudo /usr/local/libexec/verde_auto_pumps.py disarm
+sudo python3 deploy/install_pi_auto_pump_gateway.py --apply
+python3 deploy/apply_pi_pump_policy_v2.py --apply
+python3 -m py_compile ~/VERDE-Sensor-Integration/app/service.py \
+  ~/VERDE-Sensor-Integration/app/web/__init__.py \
+  ~/VERDE-Sensor-Integration/app/database/__init__.py \
+  ~/VERDE-Sensor-Integration/app/automation/{live_mode,pump_runtime,pump_decision}.py
+sudo systemctl restart verde.service
+systemctl is-active verde.service
+sudo -n /usr/local/libexec/verde_auto_pumps.py status
+```
+
+The installers make timestamped backups. This sequence does not dose. The
+gateway stays disarmed and circulation stopped until a supervised `arm` with
+physical flow confirmation. On service restart the requested mode starts in
+Semi, so Full must be selected again on the dashboard after checking live
+readings and circulation flow.

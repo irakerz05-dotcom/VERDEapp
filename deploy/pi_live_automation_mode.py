@@ -48,7 +48,7 @@ def _age_seconds(snapshot, now):
 
 
 def evaluate_live(selected_mode, snapshot, water, plant, camera, limits,
-                  extra_fault=False, *, now=None):
+                  extra_fault=False, *, now=None, pest=None):
     """Evaluate safety from fresh live readings, with descriptive outputs only."""
     if selected_mode not in (FULL, SEMI):
         raise ValueError("Unknown operating mode")
@@ -100,8 +100,9 @@ def evaluate_live(selected_mode, snapshot, water, plant, camera, limits,
     if _value(water) == "Critical":
         faults.append("water quality Critical")
         circulation_stop_reasons.append("water quality Critical")
-    if _status(plant) == "FAULT / ERROR" or (isinstance(camera, dict)
-                                              and camera.get("status") == "FAULT / ERROR"):
+    if (_status(plant) == "FAULT / ERROR" or _status(pest) == "FAULT / ERROR"
+            or (isinstance(camera, dict)
+                and camera.get("status") == "FAULT / ERROR")):
         faults.append("Faulty Vision")
         circulation_stop_reasons.append("Faulty Vision")
     if extra_fault:

@@ -55,6 +55,7 @@ class LiveModeTests(unittest.TestCase):
         self.assertTrue(decide(snapshot=live)["circulation_stop_required"])
         self.assertTrue(decide(camera={"status": "FAULT / ERROR"})["override"])
         self.assertTrue(decide(camera={"status": "FAULT / ERROR"})["circulation_stop_required"])
+        self.assertTrue(decide(pest=SimpleNamespace(status="FAULT / ERROR", value=None))["circulation_stop_required"])
         self.assertTrue(decide(water=SimpleNamespace(value="Critical", status="EXPERIMENTAL"))["override"])
 
     def test_recovering_temperature_holds_without_fault_override(self):

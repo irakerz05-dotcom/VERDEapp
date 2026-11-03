@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=60";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=60";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=61";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=61";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -495,7 +495,7 @@ function renderHistory(data, history) {
   const incidentState = (incident) => incident.state === "RESOLVED" ? "Resolved" : incident.state === "ACKNOWLEDGED" ? "Acknowledged" : "Problem detected";
   const incidents = history.incidents.map((incident) => `<li class="incident-item ${incident.tone}"><span class="incident-marker" aria-hidden="true">${incident.state === "RESOLVED" ? "✓" : incident.state === "ACKNOWLEDGED" ? "◎" : "!"}</span><div><div class="incident-title-row"><strong>${safe(incident.title)}</strong><span>${incidentState(incident)}</span></div><p>${safe(incident.message)}</p><time datetime="${safe(incident.createdAt)}">${safe(niceTime(incident.createdAt))} · ${safe(relativeAlertTime(incident.createdAt))}</time></div></li>`).join("");
   const pumpLabel = { pump1: "Pump 1 · nutrients", pump2: "Pump 2 · pH Up", pump3: "Pump 3 · pH Down" };
-  const pumpDoses = (history.pumpDoses ?? []).slice().reverse().map((dose) => `<li class="pump-dose-item"><div><strong>${safe(pumpLabel[dose.pump] ?? dose.pump)}</strong><span>${safe(dose.action.replaceAll("_", " "))} · ${safe(dose.mode ?? "Automatic")}</span></div><b>${dose.estimatedMl === null ? "Volume unavailable" : `${formatHistoryValue(dose.estimatedMl)} mL`}</b><time datetime="${safe(dose.timestamp)}">${safe(dose.label)} · ${safe(relativeAlertTime(dose.timestamp))}</time></li>`).join("");
+  const pumpDoses = (history.pumpDoses ?? []).slice().reverse().map((dose) => `<li class="pump-dose-item"><div><strong>${safe(pumpLabel[dose.pump] ?? dose.pump)}</strong><span>${safe(String(dose.action ?? "dose").replaceAll("_", " "))} · ${safe(dose.mode ?? "Mode unavailable")}${dose.requestedSeconds === null ? "" : ` · requested ${safe(formatHistoryValue(dose.requestedSeconds))} s`}</span></div><b>${dose.estimatedMl === null ? "Volume unavailable" : `Est. ${safe(formatHistoryValue(dose.estimatedMl))} mL`}</b><time datetime="${safe(dose.timestamp)}">${safe(dose.label)} · ${safe(relativeAlertTime(dose.timestamp))}</time></li>`).join("");
   const content = `<section class="page-title"><h2>History</h2><p>${safe(sourceLabel(data))}</p></section>
     <div class="filter-row" role="group" aria-label="History range">${HISTORY_RANGES.map((range) => `<button type="button" data-history-range="${range}" class="${range === history.range ? "selected" : ""}" aria-pressed="${range === history.range}">${range}</button>`).join("")}</div>
     <section class="metric-picker" aria-label="Sensor history metric">${metricButtons}</section>
@@ -728,7 +728,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=60", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=61", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

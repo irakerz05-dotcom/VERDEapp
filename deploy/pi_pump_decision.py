@@ -70,8 +70,8 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
            farmer_confirmed=False, requested_pump=None):
     """Return a proposed action; no state or hardware is changed.
 
-    ``request_full`` represents a fresh farmer action after an override. Merely
-    retaining an earlier Full selection must never clear a latched override.
+    The farmer's selected mode is retained across a safety override. A prior
+    override clears only after a fresh, healthy water evaluation.
     """
     if selected_mode not in (FULL, SEMI):
         raise ValueError("Unknown operating mode")
@@ -110,10 +110,9 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
     elif critical:
         fault_reason = "Critical condition: " + ", ".join(critical)
 
-    latched = bool(override_latched or fault_reason)
-    if (not fault_reason and not unready and water_class in ("Optimal", "Suboptimal")
-            and request_full and selected_mode == FULL):
-        latched = False
+    healthy = (not fault_reason and not unready
+               and water_class in ("Optimal", "Suboptimal"))
+    latched = bool(fault_reason or (override_latched and not healthy))
     active_mode = SEMI if latched else selected_mode
     reason = fault_reason or ("Waiting for fresh sensor readings: " + ", ".join(unready)
                               if unready else None)
@@ -137,22 +136,21 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
                  and water_class in ("Optimal", "Suboptimal"))
     confirmed = (farmer_confirmed and active_mode == SEMI and not stale
                  and not faulty and not unready and not camera_fault and not vision_fault
-                 and water_class in ("Optimal", "Suboptimal", "Critical")
-                 and (water_class != "Critical"
-                      or any(item in ("ph", "ec") for item in critical))
-                 and all(item in ("ph", "ec", "water quality") for item in critical))
+                 and not critical and water_class in ("Optimal", "Suboptimal"))
     if automatic or confirmed:
         ph = sensors["ph"]["value"]
         ec = sensors["ec"]["value_mScm"]
+        eligible_actions = []
         if ph < 5.5:
-            action = "ph_up"
+            eligible_actions.append("ph_up")
         elif ph > 6.5:
-            action = "ph_down"
-        elif ec < 1.2:
-            action = "nutrient_dosing"
+            eligible_actions.append("ph_down")
+        if ec < 1.2:
+            eligible_actions.append("nutrient_dosing")
         # High EC has no deterministic correction pump.
-        if requested_pump is not None and pump != requested_pump:
-            action = pump = None
+        action = next((candidate for candidate in eligible_actions
+                       if requested_pump is None
+                       or PUMP_BY_ACTION[candidate] == requested_pump), None)
         if action:
             pump = PUMP_BY_ACTION[action]
             duration = calibrated_dose_seconds.get(pump) if isinstance(calibrated_dose_seconds, dict) else None

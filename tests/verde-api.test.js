@@ -476,7 +476,9 @@ test("live history requests the selected time range from the Pi", async () => {
     return { ok: true, status: 200, json: async () => ({ rows: [] }) };
   };
   await new VerdeApi({ fetchImpl }).getHistory("7 Days");
-  assert.deepEqual(calls, ["/api/history?range=7%20Days", "/api/events"]);
+  assert.deepEqual(calls.slice(0, 2), ["/api/history?range=7%20Days", "/api/events"]);
+  assert.match(calls[2], /^\/api\/pump\/history\?since=/);
+  assert.equal(calls.length, 3);
 });
 
 test("history supports every sensor and selects an available metric without inventing data", () => {
@@ -524,6 +526,23 @@ test("pump actuator events appear in history with their selected pump", () => {
   assert.equal(history.pumpDoses.length, 1);
   assert.equal(history.pumpDoses[0].pump, "pump2");
   assert.equal(history.pumpDoses[0].estimatedMl, 1.64);
+});
+
+test("dedicated pump history includes farmer-confirmed doses beyond recent general events", () => {
+  const now = new Date("2026-09-25T12:00:00Z");
+  const generalEvents = [{ id: 99, timestamp: "2026-09-25T11:59:00Z",
+    category: "camera", message: "Captured" }];
+  const pumpEvents = [{ id: 20, timestamp: "2026-09-25T10:30:00Z",
+    category: "actuator", message: "DOSED", payload: JSON.stringify({
+      status: "DOSED", value: { mode: "Semi-Automation Mode", pump: "pump1",
+        action: "nutrient_dosing", requested_seconds: 1.5, estimated_ml: 1.23 }
+    }) }];
+  const history = normalizeBackendHistory([], "Today", now, null, generalEvents, pumpEvents);
+  assert.equal(history.pumpDoses.length, 1);
+  assert.equal(history.pumpDoses[0].pump, "pump1");
+  assert.equal(history.pumpDoses[0].mode, "Semi-Automation Mode");
+  assert.equal(history.pumpDoses[0].requestedSeconds, 1.5);
+  assert.equal(history.pumpDoses[0].estimatedMl, 1.23);
 });
 
 test("harvest detection is a notification, never a vision warning", () => {

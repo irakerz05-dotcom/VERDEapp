@@ -108,19 +108,18 @@ class PumpDecisionTests(unittest.TestCase):
         self.assertFalse(decision.override_latched)
         self.assertEqual(choose(sensors=sensors(ph=5.2)).pump, "pump2")
 
-    def test_latched_override_needs_new_farmer_full_request(self):
+    def test_latched_override_returns_to_requested_full_mode_when_healthy(self):
         held = choose(override_latched=True, circulation_flow_gpio_level="HIGH")
-        self.assertEqual((held.active_mode, held.circulation), (SEMI, "RUN"))
-        restored = choose(override_latched=True, request_full=True,
-                          circulation_flow_gpio_level="HIGH")
-        self.assertEqual((restored.active_mode, restored.circulation), (FULL, "RUN"))
-        still_faulty = choose(override_latched=True, request_full=True,
+        self.assertEqual((held.active_mode, held.circulation), (FULL, "RUN"))
+        self.assertFalse(held.override_latched)
+        still_faulty = choose(override_latched=True,
                               vision_fault=True, circulation_flow_gpio_level="HIGH")
         self.assertEqual(still_faulty.active_mode, SEMI)
         recovering = sensors()
         recovering["water_temperature"] = {"value_C": None, "status": "RECOVERING"}
-        self.assertEqual(choose(override_latched=True, request_full=True,
+        self.assertEqual(choose(override_latched=True,
                                 sensors=recovering).active_mode, SEMI)
+        self.assertEqual(choose(selected_mode=SEMI, override_latched=True).active_mode, SEMI)
 
     def test_stale_snapshot_never_doses(self):
         decision = choose(sensors=sensors(ph=5.2), snapshot_age_seconds=66,
@@ -133,14 +132,14 @@ class PumpDecisionTests(unittest.TestCase):
         decision = choose(sensors=live, circulation_flow_gpio_level="HIGH")
         self.assertEqual((decision.pump, decision.circulation), (None, "STOP"))
 
-    def test_semi_requires_confirmation_and_rejects_noncorrectable_critical(self):
+    def test_semi_requires_confirmation_and_stops_every_critical_condition(self):
         high_ph = sensors(ph=8.5)
         self.assertIsNone(choose(selected_mode=SEMI, sensors=high_ph,
                                  water_class="Critical").pump)
         confirmed = choose(selected_mode=SEMI, sensors=high_ph,
                            water_class="Critical", farmer_confirmed=True,
                            circulation_flow_gpio_level="HIGH")
-        self.assertEqual((confirmed.pump, confirmed.circulation), ("pump3", "RUN"))
+        self.assertEqual((confirmed.pump, confirmed.circulation), (None, "STOP"))
         high_turbidity = sensors(ph=5.2)
         high_turbidity["turbidity"]["classification"] = "CRITICAL"
         self.assertIsNone(choose(selected_mode=SEMI, sensors=high_turbidity,
@@ -149,6 +148,15 @@ class PumpDecisionTests(unittest.TestCase):
         faulty["ph"]["status"] = "ERROR"
         self.assertIsNone(choose(selected_mode=SEMI, sensors=faulty,
                                  farmer_confirmed=True).pump)
+
+    def test_farmer_selects_one_eligible_pump_when_ph_and_ec_both_need_correction(self):
+        readings = sensors(ph=5.2, ec=1.0)
+        base = dict(selected_mode=SEMI, sensors=readings, farmer_confirmed=True,
+                    circulation_flow_gpio_level="HIGH")
+        self.assertEqual(choose(**base, requested_pump="pump2").pump, "pump2")
+        self.assertEqual(choose(**base, requested_pump="pump1").pump, "pump1")
+        self.assertIsNone(choose(**base, requested_pump="pump3").pump)
+        self.assertEqual(choose(**base).pump, "pump2")
 
 
 if __name__ == "__main__":

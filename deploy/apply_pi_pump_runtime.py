@@ -23,17 +23,11 @@ STARTUP_NEW = ('        self.event("actuator", "Startup: protected pump gateway 
 TAIL_OLD = '''                self.actuators.all_off("Database error")
             return copy.deepcopy(self.state)'''
 TAIL_NEW = '''                self.actuators.all_off("Database error")
-                self.selected_mode = SEMI
             else:
                 # VERDE-PUMP-RUNTIME-v1: gateway starts disarmed and owns GPIO.
                 applied = self.actuators.apply(
                     self.state["automation"], live_snapshot,
                     experimental_water, plant, camera)
-                if applied["active_mode"] == SEMI and self.selected_mode == FULL:
-                    self.selected_mode = SEMI
-                    self.event("mode", "Pump controller safety override selected Semi-Automation", {
-                        "reason": applied.get("override_reason"),
-                    })
                 self.state["automation"] = applied
             return copy.deepcopy(self.state)'''
 SHUTDOWN_OLD = ('        self.event("actuator", "Shutdown: SAFE/OFF requested; '

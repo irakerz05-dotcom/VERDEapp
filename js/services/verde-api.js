@@ -559,7 +559,8 @@ function historyView(range, metrics, selectedMetric, incidents = [], pumpDoses =
   };
 }
 
-export function normalizeBackendHistory(rows, range = "Today", now = new Date(), selectedMetric = null, eventRows = []) {
+export function normalizeBackendHistory(rows, range = "Today", now = new Date(), selectedMetric = null,
+  eventRows = [], pumpEventRows = eventRows) {
   const selectedRange = ["Today", "24 Hours", "7 Days"].includes(range) ? range : "Today";
   const start = historyStart(selectedRange, now);
   const validRows = (Array.isArray(rows) ? rows : [])
@@ -572,7 +573,7 @@ export function normalizeBackendHistory(rows, range = "Today", now = new Date(),
     (event.state === "OPEN" || event.state === "RESOLVED")
     && Number.isFinite(Date.parse(event.createdAt))
     && Date.parse(event.createdAt) >= start);
-  const pumpDoses = normalizeBackendEvents(eventRows)
+  const pumpDoses = normalizeBackendEvents(pumpEventRows)
     .filter((event) => event.pumpDose && Number.isFinite(Date.parse(event.createdAt))
       && Date.parse(event.createdAt) >= start)
     .map((event) => ({ ...event.pumpDose, timestamp: event.createdAt,
@@ -628,7 +629,7 @@ export function normalizeBackendEvents(rows) {
       pumpDose: category === "actuator" && ["pump1", "pump2", "pump3"].includes(dosePayload.pump)
         ? {
           pump: dosePayload.pump,
-          action: dosePayload.action ?? "dose",
+          action: String(dosePayload.action ?? "dose"),
           mode: dosePayload.mode ?? null,
           requestedSeconds: finiteNumber(dosePayload.requested_seconds),
           estimatedMl: finiteNumber(dosePayload.estimated_ml)
@@ -690,11 +691,16 @@ export class VerdeApi {
   }
 
   async getHistory(range = "Today", selectedMetric = null) {
-    const [historyPayload, eventPayload] = await Promise.all([
-      this.request(`/api/history?range=${encodeURIComponent(range)}`),
-      this.request("/api/events")
+    const now = new Date();
+    const selectedRange = ["Today", "24 Hours", "7 Days"].includes(range) ? range : "Today";
+    const since = new Date(historyStart(selectedRange, now)).toISOString();
+    const [historyPayload, eventPayload, pumpPayload] = await Promise.all([
+      this.request(`/api/history?range=${encodeURIComponent(selectedRange)}`),
+      this.request("/api/events"),
+      this.optionalRequest(`/api/pump/history?since=${encodeURIComponent(since)}`)
     ]);
-    return normalizeBackendHistory(historyPayload?.rows, range, new Date(), selectedMetric, eventPayload?.rows);
+    return normalizeBackendHistory(historyPayload?.rows, selectedRange, now, selectedMetric,
+      eventPayload?.rows, pumpPayload?.rows ?? eventPayload?.rows);
   }
 
   async getAlerts() {

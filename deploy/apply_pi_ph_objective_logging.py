@@ -25,10 +25,8 @@ SERVICE_NEW = '''                self.state["automation"] = applied
                     self.event("actuator", "Automatic dose completed", applied["dose_event"])
                     if self.database_error:
                         stopped = self.actuators.all_off("Automatic dose event could not be logged")
-                        self.selected_mode = SEMI
                         self.state["database"] = {"status": "FAULT / ERROR", "detail": self.database_error}
                         self.state["automation"]["active_mode"] = SEMI
-                        self.state["automation"]["selected_mode"] = SEMI
                         self.state["automation"]["actuation_enabled"] = False
                         self.state["automation"]["override"] = True
                         self.state["automation"]["override_reason"] = "Database logging failed after dose"

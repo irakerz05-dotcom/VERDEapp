@@ -21,7 +21,7 @@ CALL_OLD = ('            automation = evaluate(self.selected_mode, readings, wat
 CALL_NEW = '''            # VERDE-LIVE-AUTOMATION-MODE-v1; hardware outputs remain disabled.
             automation = evaluate_live(
                 self.selected_mode, live_snapshot, experimental_water, plant, camera,
-                self.config["limits"], bool(self.database_error))
+                self.config["limits"], bool(self.database_error), pest=pest)'''
 
 
 def replace_once(source, old, new, name):

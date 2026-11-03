@@ -27,9 +27,10 @@ REVIEWED_GATEWAY_HASHES = {
     "025c766b0a42f6e27fb59c76ac173e1b63e1e35c0eb9a0cdc1d4be5a72f713b8",  # 20 L
     "91c0bf7666e4eae87cd04afd869b7d84ea9ff453e1ea410b54bed679c3aacc0b",  # 12.5 L
     "40c8856817d90d2ab6435559812582927166bcbc39a1da9922ca57a75e00435b",  # 18 L at abe6b12
+    "81df6018cd9e00b6c30c9910ac1bd46aafd2ab7876bd1b5e6ecde4a6195b3da7",  # current 18 L gateway
 }
 SUDOERS_TEXT = """# VERDE protected pump gateway. arm/disarm require interactive sudo.
-verde ALL=(root) NOPASSWD: /usr/local/libexec/verde_auto_pumps.py status, /usr/local/libexec/verde_auto_pumps.py safe-off, /usr/local/libexec/verde_auto_pumps.py circulation *, /usr/local/libexec/verde_auto_pumps.py dose *
+verde ALL=(root) NOPASSWD: /usr/local/libexec/verde_auto_pumps.py status, /usr/local/libexec/verde_auto_pumps.py safe-off, /usr/local/libexec/verde_auto_pumps.py circulation *, /usr/local/libexec/verde_auto_pumps.py dose *, /usr/local/libexec/verde_auto_pumps.py manual-dose *
 """
 
 

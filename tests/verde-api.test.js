@@ -402,6 +402,20 @@ test("backend status is normalized without inventing unavailable readings or AI 
   assert.equal(snapshot.incidents[0].state, "OPEN");
 });
 
+test("manual dosing arm is exposed separately from a Critical circulation stop", () => {
+  const state = { ...backendState, automation: {
+    ...backendState.automation,
+    hardware_status: "MANUAL DOSING ARMED — CIRCULATION STOPPED",
+    circulation_stop_required: true,
+    confirmation_available: true,
+    recommendations: ["pH-Down dosing", "EC nutrient dosing"]
+  } };
+  const snapshot = normalizeBackendSnapshot(state, { sensors: state.sensors });
+  assert.equal(snapshot.pumpAutomation.manualDosingArmed, true);
+  assert.equal(snapshot.pumpAutomation.circulationStopRequired, true);
+  assert.equal(snapshot.pumpAutomation.confirmationAvailable, true);
+});
+
 test("fresh AI artifacts select the annotated frame and expose real confidence", () => {
   const state = {
     ...backendState,

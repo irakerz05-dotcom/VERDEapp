@@ -13,7 +13,7 @@ import subprocess
 from datetime import datetime, timezone
 
 from app.automation import FULL, SEMI, OUTPUTS
-from app.automation.pump_decision import decide
+from app.automation.pump_decision import decide, manual_correction
 from app.automation.pump_dose_settings import load as load_dose_settings, save as save_dose_settings, durations as dose_durations, MAX_ML
 from app.components import Result
 
@@ -79,13 +79,12 @@ class PumpRuntime:
         if requested_pump not in ("pump1", "pump2", "pump3"):
             return Result("BLOCKED — SELECT ONE PUMP")
         automation = state.get("automation", {}) if isinstance(state, dict) else {}
-        if automation.get("active_mode") != SEMI:
+        if automation.get("active_mode") != SEMI or automation.get("selected_mode") != SEMI:
             return Result("BLOCKED — SEMI MODE REQUIRED")
         if automation.get("confirmation_available") is not True:
             return Result("BLOCKED — NO CONFIRMABLE RECOMMENDATION")
-        if automation.get("hold_reason") or automation.get("circulation_stop_required", True):
-            return Result("BLOCKED — SENSOR OR VISION HOLD",
-                          detail=automation.get("hold_reason") or automation.get("override_reason") or "")
+        if state.get("database", {}).get("status") != "AVAILABLE":
+            return Result("BLOCKED — DATABASE UNAVAILABLE")
         if snapshot_age_seconds(live_snapshot) > 65:
             return Result("BLOCKED — STALE SENSOR SAMPLE")
         try:
@@ -93,6 +92,27 @@ class PumpRuntime:
             if gateway.get("armed") is not True or gateway.get("in_progress"):
                 return Result("BLOCKED — PUMP GATEWAY DISARMED OR BUSY")
             sensors = live_snapshot.get("sensors", {}) if isinstance(live_snapshot, dict) else {}
+            manual_stop = automation.get("circulation_stop_required") is True
+            if manual_stop or gateway.get("arm_mode") == "manual":
+                if gateway.get("arm_mode") != "manual" or gateway.get("circulation") != "STOP":
+                    return Result("BLOCKED — MANUAL DOSING ARM REQUIRED")
+                proposal = manual_correction(
+                    sensors, requested_pump, gateway.get("last_dose_elapsed_seconds"),
+                    dose_durations(load_dose_settings()))
+                if proposal is None:
+                    return Result("BLOCKED — NO FRESH MATCHING READING OR MIXING WAIT")
+                action, pump, seconds, volume = proposal
+                result = self.command("manual-dose", pump, f"{seconds:.8f}")
+                return Result("DOSED", value={**result, "mode": SEMI,
+                                              "pump": pump, "action": action,
+                                              "requested_seconds": seconds,
+                                              "estimated_ml": volume},
+                              detail=f"Farmer confirmed manual {action}; mix and check independently")
+            if automation.get("hold_reason"):
+                return Result("BLOCKED — SENSOR OR VISION HOLD",
+                              detail=automation.get("hold_reason") or "")
+            if gateway.get("arm_mode") != "flow":
+                return Result("BLOCKED — FLOW ARM REQUIRED")
             water = state.get("water_quality_experimental", {})
             plant = state.get("plant_condition", {})
             camera = state.get("camera", {})
@@ -145,6 +165,16 @@ class PumpRuntime:
                 output["confirmation_available"] = False
                 output["hardware_status"] = "DISARMED — CIRCULATION CONFIGURATION PENDING"
                 output["outputs"] = {name: "OFF / DISARMED" for name in OUTPUTS}
+                return output
+            if gateway.get("arm_mode") == "manual":
+                self.command("safe-off")
+                output["active_mode"] = SEMI
+                output["actuation_enabled"] = False
+                output["confirmation_available"] = output.get("selected_mode") == SEMI and any(
+                    item in CORRECTIVE_RECOMMENDATIONS
+                    for item in output.get("recommendations", []))
+                output["hardware_status"] = "MANUAL DOSING ARMED — CIRCULATION STOPPED"
+                output["outputs"] = {name: "OFF" for name in OUTPUTS}
                 return output
             if automation.get("circulation_stop_required", True):
                 self.command("safe-off")

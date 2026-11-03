@@ -2,7 +2,7 @@
 
 import unittest
 
-from deploy.pi_pump_decision import FULL, SEMI, decide
+from deploy.pi_pump_decision import FULL, SEMI, decide, manual_correction
 
 
 def sensors(ph=6.0, ec=1.4):
@@ -30,6 +30,18 @@ def choose(**overrides):
 
 
 class PumpDecisionTests(unittest.TestCase):
+    def test_manual_correction_uses_only_fresh_matching_sensor(self):
+        durations = {"pump1": 4.5, "pump2": 4.5, "pump3": 4.5}
+        live = sensors(ph=8.5, ec=0.3)
+        self.assertEqual(manual_correction(live, "pump3", None, durations),
+                         ("ph_down", "pump3", 4.5, 3.69))
+        self.assertEqual(manual_correction(live, "pump1", None, durations),
+                         ("nutrient_dosing", "pump1", 4.5, 3.69))
+        self.assertIsNone(manual_correction(live, "pump2", None, durations))
+        self.assertIsNone(manual_correction(live, "pump3", 59, durations))
+        live["ph"]["status"] = "ERROR"
+        self.assertIsNone(manual_correction(live, "pump3", None, durations))
+        self.assertIsNotNone(manual_correction(live, "pump1", None, durations))
     def test_pump_mapping_and_unverified_circulation(self):
         self.assertEqual(choose(sensors=sensors(ph=5.2)).pump, "pump2")
         self.assertEqual(choose(sensors=sensors(ph=6.8)).pump, "pump3")

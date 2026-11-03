@@ -32,6 +32,7 @@ WINDOW_SECONDS = 24 * 60 * 60
 MAX_AUTO_SECONDS = 4.5
 PUMPS = ("pump1", "pump2", "pump3")
 ARM_RECORD = "GPIO24 HIGH=FLOW LOW=STOP; 18L\n"
+MANUAL_ARM_RECORD = "MANUAL DOSING ONLY; GPIO24 STOP; 18L\n"
 
 
 def protected_controller():
@@ -48,13 +49,19 @@ def protected_controller():
     return module
 
 
-def armed():
+def arm_mode():
     try:
         metadata = ARM_PATH.stat()
-        return (metadata.st_uid == 0 and not metadata.st_mode & 0o077
-                and ARM_PATH.read_text(encoding="utf-8") == ARM_RECORD)
+        if metadata.st_uid != 0 or metadata.st_mode & 0o077:
+            return None
+        record = ARM_PATH.read_text(encoding="utf-8")
+        return "flow" if record == ARM_RECORD else "manual" if record == MANUAL_ARM_RECORD else None
     except FileNotFoundError:
-        return False
+        return None
+
+
+def armed():
+    return arm_mode() is not None
 
 
 def atomic_json(path, data):
@@ -122,6 +129,7 @@ def set_circulation(controller, state):
 def status(controller, data, clock):
     return {
         "armed": armed(),
+        "arm_mode": arm_mode(),
         "circulation": circulation_state(controller),
         "dosing_pins": {name: controller.pin_state(pin)
                         for name, pin in controller.DOSING_PINS.items()},
@@ -132,13 +140,14 @@ def status(controller, data, clock):
     }
 
 
-def dose(controller, data, clock, pump, seconds):
-    if not armed():
-        raise RuntimeError("Pump controller is disarmed")
+def dose(controller, data, clock, pump, seconds, *, manual=False):
+    if arm_mode() != ("manual" if manual else "flow"):
+        raise RuntimeError("Pump controller is not armed for this dosing mode")
     if data["in_progress"]:
         raise RuntimeError("An interrupted dose needs manual inspection")
-    if circulation_state(controller) != "RUN":
-        raise RuntimeError("Circulation is not confirmed running")
+    required_circulation = "STOP" if manual else "RUN"
+    if circulation_state(controller) != required_circulation:
+        raise RuntimeError(f"Circulation must be {required_circulation} for this dose")
     if not isinstance(seconds, float) or not math.isfinite(seconds) or not 0 < seconds <= MAX_AUTO_SECONDS:
         raise RuntimeError(f"Dose duration must be greater than zero and at most {MAX_AUTO_SECONDS} seconds")
     elapsed = last_elapsed(data, clock)
@@ -172,12 +181,16 @@ def main():
     commands.add_parser("status")
     commands.add_parser("safe-off")
     commands.add_parser("arm")
+    commands.add_parser("arm-manual")
     commands.add_parser("disarm")
     circulation = commands.add_parser("circulation")
     circulation.add_argument("state", choices=("run", "stop"))
     dosing = commands.add_parser("dose")
     dosing.add_argument("pump", choices=PUMPS)
     dosing.add_argument("seconds", type=float)
+    manual_dosing = commands.add_parser("manual-dose")
+    manual_dosing.add_argument("pump", choices=PUMPS)
+    manual_dosing.add_argument("seconds", type=float)
     args = parser.parse_args()
     controller = protected_controller()
     lock = controller.lock_control()
@@ -204,6 +217,7 @@ def main():
                     raise RuntimeError("Interrupted dose needs manual inspection")
                 with contextlib.redirect_stdout(sys.stderr):
                     controller.dosing_off()
+                ARM_PATH.unlink(missing_ok=True)
                 set_circulation(controller, "RUN")
                 try:
                     if input("Is water physically flowing? Type FLOWING to arm: ").strip() != "FLOWING":
@@ -214,16 +228,29 @@ def main():
                     set_circulation(controller, "STOP")
                     raise
                 result = status(controller, data, time.time())
+            elif args.command == "arm-manual":
+                if data["in_progress"]:
+                    raise RuntimeError("Interrupted dose needs manual inspection")
+                ARM_PATH.unlink(missing_ok=True)
+                with contextlib.redirect_stdout(sys.stderr):
+                    controller.dosing_off()
+                set_circulation(controller, "STOP")
+                if input("Circulation is stopped. Watch the outlet, mix the reservoir manually, and check an independent meter after dosing. Type MANUAL to arm: ").strip() != "MANUAL":
+                    raise RuntimeError("Manual dosing was not confirmed; controller stays disarmed")
+                ARM_PATH.write_text(MANUAL_ARM_RECORD, encoding="utf-8")
+                os.chmod(ARM_PATH, 0o600)
+                result = status(controller, data, time.time())
             elif args.command == "circulation":
-                if not armed():
-                    raise RuntimeError("Pump controller is disarmed")
+                if arm_mode() != "flow":
+                    raise RuntimeError("Circulation requires flow arming")
                 if data["in_progress"]:
                     raise RuntimeError("Interrupted dose needs manual inspection")
                 controller.require_dosing_off()
                 set_circulation(controller, "RUN")
                 result = status(controller, data, time.time())
             else:
-                result = dose(controller, data, clock, args.pump, args.seconds)
+                result = dose(controller, data, clock, args.pump, args.seconds,
+                              manual=args.command == "manual-dose")
         print(json.dumps(result, separators=(",", ":")))
     finally:
         fcntl.flock(lock, fcntl.LOCK_UN)

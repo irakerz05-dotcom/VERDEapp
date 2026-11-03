@@ -84,7 +84,7 @@ class RuntimeTests(unittest.TestCase):
         module.load_dose_settings = lambda: {"pump1": 3.69, "pump2": 0.82, "pump3": 3.69}
         runtime = module.PumpRuntime()
         calls = []
-        gateway = {"armed": True, "circulation": "RUN", "in_progress": False,
+        gateway = {"armed": True, "arm_mode": "flow", "circulation": "RUN", "in_progress": False,
                    "last_dose_elapsed_seconds": None,
                    "ml_in_last_24h": {"pump1": 0, "pump2": 0, "pump3": 0}}
         runtime.command = lambda *args: calls.append(args) or gateway
@@ -142,7 +142,7 @@ class RuntimeTests(unittest.TestCase):
         automation["active_mode"] = pi_pump_decision.SEMI
         automation["selected_mode"] = pi_pump_decision.SEMI
         automation["confirmation_available"] = True
-        state = {"automation": automation,
+        state = {"automation": automation, "database": {"status": "AVAILABLE"},
                  "water_quality_experimental": {"value": "Optimal"},
                  "plant_condition": {"status": "READY", "value": "Healthy"},
                  "camera": camera}
@@ -153,7 +153,7 @@ class RuntimeTests(unittest.TestCase):
     def test_farmer_can_select_nutrients_when_ph_also_needs_correction(self):
         runtime = load_runtime().PumpRuntime()
         calls = []
-        gateway = {"armed": True, "circulation": "RUN", "in_progress": False,
+        gateway = {"armed": True, "arm_mode": "flow", "circulation": "RUN", "in_progress": False,
                    "last_dose_elapsed_seconds": None, "ml_in_last_24h": {}}
         runtime.command = lambda *args: calls.append(args) or gateway
         automation, snapshot, water, plant, camera = inputs()
@@ -161,7 +161,7 @@ class RuntimeTests(unittest.TestCase):
         automation.update(active_mode=pi_pump_decision.SEMI,
                           selected_mode=pi_pump_decision.SEMI,
                           confirmation_available=True)
-        state = {"automation": automation,
+        state = {"automation": automation, "database": {"status": "AVAILABLE"},
                  "water_quality_experimental": {"value": "Suboptimal"},
                  "plant_condition": {"status": "READY", "value": "Healthy"},
                  "camera": camera}
@@ -197,6 +197,59 @@ class RuntimeTests(unittest.TestCase):
         result = runtime.confirm(state, snapshot)
         self.assertIn("BLOCKED", result.status)
         self.assertEqual(calls, [])
+
+    def test_critical_manual_arm_allows_selected_pump_with_circulation_stopped(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        gateway = {"armed": True, "arm_mode": "manual", "circulation": "STOP",
+                   "in_progress": False, "last_dose_elapsed_seconds": None}
+        runtime.command = lambda *args: calls.append(args) or gateway
+        automation, snapshot, water, plant, camera = inputs()
+        snapshot["sensors"]["ph"]["value"] = 8.5
+        automation.update(active_mode=pi_pump_decision.SEMI,
+                          selected_mode=pi_pump_decision.SEMI,
+                          override=True, circulation_stop_required=True,
+                          recommendations=["pH-Down dosing"], confirmation_available=True)
+        state = {"automation": automation, "database": {"status": "AVAILABLE"}}
+        displayed = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertTrue(displayed["confirmation_available"])
+        self.assertFalse(displayed["actuation_enabled"])
+        self.assertEqual(displayed["outputs"]["circulation_pump"], "OFF")
+        self.assertEqual(calls, [("status",), ("safe-off",)])
+        calls.clear()
+        result = runtime.confirm(state, snapshot, "pump3")
+        self.assertEqual(result.status, "DOSED")
+        self.assertEqual(calls, [("status",), ("manual-dose", "pump3", "4.50000000")])
+
+    def test_manual_arm_never_runs_full_auto_or_circulation(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        runtime.command = lambda *args: calls.append(args) or {
+            "armed": True, "arm_mode": "manual", "circulation": "STOP",
+            "in_progress": False}
+        automation, snapshot, water, plant, camera = inputs()
+        automation["recommendations"] = ["pH-Up dosing"]
+        result = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertEqual(calls, [("status",), ("safe-off",)])
+        self.assertEqual(result["active_mode"], pi_pump_decision.SEMI)
+        self.assertFalse(result["confirmation_available"])
+        self.assertFalse(result["actuation_enabled"])
+
+    def test_manual_arm_rejects_faulty_matching_sensor(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        runtime.command = lambda *args: calls.append(args) or {
+            "armed": True, "arm_mode": "manual", "circulation": "STOP",
+            "in_progress": False, "last_dose_elapsed_seconds": None}
+        automation, snapshot, *_ = inputs()
+        snapshot["sensors"]["ph"].update(value=8.5, status="ERROR")
+        automation.update(active_mode=pi_pump_decision.SEMI,
+                          selected_mode=pi_pump_decision.SEMI,
+                          circulation_stop_required=True, confirmation_available=True)
+        result = runtime.confirm({"automation": automation,
+                                  "database": {"status": "AVAILABLE"}}, snapshot, "pump3")
+        self.assertIn("BLOCKED", result.status)
+        self.assertEqual(calls, [("status",)])
 
     def test_fault_blocks_farmer_confirmation_before_gateway_call(self):
         runtime = load_runtime().PumpRuntime()

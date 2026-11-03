@@ -665,7 +665,7 @@ sample, or controller override. The active mode becomes Semi and circulation
 stops. Once the next fresh evaluation clears the fault, Full mode and
 circulation resume automatically if Full was requested. A farmer-selected Semi
 mode stays Semi. A farmer-confirmed dose requires an explicit selection of one
-currently recommended pump; Critical and faulty conditions block dosing. Pump
+currently recommended pump. Automatic dosing stays blocked in Critical and faulty conditions. Pump
 1/2/3 doses are available in History through `/api/pump/history`, including
 older events beyond the general event feed's last 30 rows. Dose volumes shown
 there are estimates from the assumed flow rate, not measured delivery.
@@ -697,9 +697,28 @@ Semi, so Full must be selected again on the dashboard after checking live
 readings and circulation flow.
 
 The dashboard displays live pH/EC correction recommendations even while a
-Critical condition blocks dosing. Critical or faulty conditions still stop
-circulation and require correction outside the app. After fresh readings clear
-the stop, supervise the gateway rearm and request Full mode. The History page
+Critical condition stops circulation and automatic dosing. With the later
+`deploy/apply_pi_critical_manual_dosing.py` update, a person can explicitly arm
+manual dosing on the Pi while circulation stays stopped, select one recommended
+pump in Semi-Automation, and confirm a bounded pulse. The service rechecks the
+matching pH or EC sensor immediately before the command. A faulty or stale
+matching sensor cannot authorize its pump. The operator must watch delivery,
+mix the reservoir manually, and verify with a separate meter before another
+dose. The gateway retains the 4.5-second maximum pulse, one pump at a time,
+and a 60-second minimum gap. Manual arming never permits automatic dosing or
+starts circulation. After fresh readings clear the stop, disarm manual dosing,
+physically verify flow, and use the normal `arm` command before selecting Full.
+The History page
 shows recorded Pump 1–3 doses from the last seven days above its sensor chart,
 regardless of the chart's Today/24 Hours/7 Days filter. Direct manual-controller
 hardware tests are not recorded as app doses.
+
+To install the Critical manual-dose policy, run the gateway installer `--check`
+and `deploy/apply_pi_critical_manual_dosing.py --check` first. Disarm the gateway,
+install the reviewed gateway with `sudo python3 deploy/install_pi_auto_pump_gateway.py --apply`,
+apply the guarded backend update with
+`python3 deploy/apply_pi_critical_manual_dosing.py --apply`, then compile and
+restart `verde.service`. The installers back up changed files and issue no dose.
+The separate `sudo /usr/local/libexec/verde_auto_pumps.py arm-manual` command
+asks for a physical supervision acknowledgment and leaves circulation STOP.
+Use `disarm` to end the manual session.

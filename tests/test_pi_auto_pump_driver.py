@@ -14,6 +14,7 @@ class FakeController:
 
     def __init__(self):
         self.dose_calls = []
+        self.circulation = "RUN"
 
     def require_dosing_off(self):
         pass
@@ -25,7 +26,8 @@ class FakeController:
         pass
 
     def pin_state(self, pin):
-        return "24: op dh pd | hi // GPIO24 = output"
+        return ("24: op dh pd | hi // GPIO24 = output" if self.circulation == "RUN"
+                else "24: op dl pd | lo // GPIO24 = output")
 
 
 class GatewayTests(unittest.TestCase):
@@ -33,7 +35,7 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(driver.ARM_RECORD, "GPIO24 HIGH=FLOW LOW=STOP; 18L\n")
         self.assertEqual(driver.PUMPS, ("pump1", "pump2", "pump3"))
         controller = FakeController()
-        with patch.object(driver, "armed", return_value=True):
+        with patch.object(driver, "arm_mode", return_value="flow"):
             with self.assertRaisesRegex(RuntimeError, "4.5 seconds"):
                 driver.dose(controller, {"events": [], "in_progress": False},
                             1000.0, "pump2", 5.0)
@@ -41,8 +43,8 @@ class GatewayTests(unittest.TestCase):
 
     def test_disarmed_gateway_never_doses(self):
         controller = FakeController()
-        with patch.object(driver, "armed", return_value=False):
-            with self.assertRaisesRegex(RuntimeError, "disarmed"):
+        with patch.object(driver, "arm_mode", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "not armed"):
                 driver.dose(controller, {"events": [], "in_progress": False},
                             1000.0, "pump1", 3.125)
         self.assertEqual(controller.dose_calls, [])
@@ -52,7 +54,7 @@ class GatewayTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             state_path = Path(directory) / "state.json"
             with (patch.object(driver, "STATE_PATH", state_path),
-                  patch.object(driver, "armed", return_value=True),
+                  patch.object(driver, "arm_mode", return_value="flow"),
                   patch.object(driver.time, "time", return_value=1070.0)):
                 state = {"version": 1, "events": [], "in_progress": False}
                 result = driver.dose(controller, state, 1000.0, "pump1", 4.5)
@@ -72,10 +74,27 @@ class GatewayTests(unittest.TestCase):
         controller = FakeController()
         state = {"version": 1, "events": [{"pump": "pump2", "at": 1000.0,
                                              "ml": 4.1}], "in_progress": True}
-        with patch.object(driver, "armed", return_value=True):
+        with patch.object(driver, "arm_mode", return_value="flow"):
             with self.assertRaisesRegex(RuntimeError, "interrupted"):
                 driver.dose(controller, state, 1200.0, "pump2", 2.0)
         self.assertEqual(controller.dose_calls, [])
+
+    def test_manual_dose_requires_manual_arm_and_stopped_circulation(self):
+        controller = FakeController()
+        controller.circulation = "STOP"
+        state = {"version": 1, "events": [], "in_progress": False}
+        with tempfile.TemporaryDirectory() as directory:
+            with (patch.object(driver, "STATE_PATH", Path(directory) / "state.json"),
+                  patch.object(driver, "arm_mode", return_value="manual"),
+                  patch.object(driver.time, "time", return_value=1070.0)):
+                result = driver.dose(controller, state, 1000.0, "pump3", 4.5, manual=True)
+                self.assertAlmostEqual(result["estimated_ml"], 3.69)
+                self.assertEqual(controller.dose_calls, [("pump3", 4.5)])
+                with self.assertRaisesRegex(RuntimeError, "not armed"):
+                    driver.dose(controller, state, 1100.0, "pump3", 4.5)
+                controller.circulation = "RUN"
+                with self.assertRaisesRegex(RuntimeError, "must be STOP"):
+                    driver.dose(controller, state, 1100.0, "pump3", 4.5, manual=True)
 
 
 if __name__ == "__main__":

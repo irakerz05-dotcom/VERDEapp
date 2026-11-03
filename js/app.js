@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=63";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=63";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=64";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=64";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -180,7 +180,9 @@ function bindDoseConfirmation(data) {
     }
     showModal({
       title: `Confirm ${button.dataset.pumpLabel}?`,
-      text: `The Pi will recheck the sensors, then run only ${button.dataset.pumpLabel} using its saved volume (up to ${Number(data.pumpAutomation?.doseSettings?.max_pulse_ml || 3.69).toFixed(2)} mL). Allow at least 1 minute of mixing before another dose.`,
+      text: data.pumpAutomation?.manualDosingArmed
+        ? `Circulation is stopped. The Pi will recheck the matching sensor, then run only ${button.dataset.pumpLabel} using its saved volume (up to ${Number(data.pumpAutomation?.doseSettings?.max_pulse_ml || 3.69).toFixed(2)} mL). Watch the outlet, mix the reservoir manually, and check with a separate meter before another dose.`
+        : `The Pi will recheck the sensors, then run only ${button.dataset.pumpLabel} using its saved volume (up to ${Number(data.pumpAutomation?.doseSettings?.max_pulse_ml || 3.69).toFixed(2)} mL). Allow at least 1 minute of mixing before another dose.`,
       confirmText: "Confirm dose",
       onConfirm: async () => {
         button.disabled = true;
@@ -356,18 +358,22 @@ function correctionGuidance(data) {
   const highEc = recommendations.includes("High EC: manual inspection; correction procedure pending")
     ? "<li><strong>High EC · manual inspection</strong><span>No automatic correction pump is configured for high EC.</span></li>" : "";
   const canConfirm = data.pumpAutomation?.confirmationAvailable === true;
-  const buttons = canConfirm ? `<div class="dose-choice-list">${choices.map(([, pump, label]) => `<button data-confirm-dose data-pump="${pump}" data-pump-label="${safe(label)}" type="button" class="primary">Confirm ${safe(label)}</button>`).join("")}</div>` : "";
+  const buttons = canConfirm ? `<div class="dose-choice-list">${choices.map(([, pump, label]) => `<button data-confirm-dose data-pump="${pump}" data-pump-label="${safe(label)}" type="button" class="primary">${critical ? "Manually dose" : "Confirm"} ${safe(label)}</button>`).join("")}</div>` : "";
   const manualRequest = critical ? `<p class="correction-request"><strong>Manual correction required for Critical readings.</strong> ${choices.length ? "The pumps named below indicate which solution is needed. Correct one condition at a time under supervision and remeasure after mixing." : "No dosing pump is recommended from the available readings; inspect the Critical condition."}</p>` : "";
-  const blocked = data.pumpAutomation?.circulationStopRequired
-    ? "Critical or faulty condition: circulation and app dosing are stopped. Perform any manual correction outside the app, then recheck the sensors and rearm circulation when safe."
+  const blocked = data.pumpAutomation?.manualDosingArmed
+    ? "Circulation is stopped and automatic dosing is off. Select one recommended pump for a supervised pulse, then mix and verify with a separate meter before another dose."
+    : data.pumpAutomation?.circulationStopRequired
+      ? "Critical or faulty condition: circulation is stopped. To dose a recommended pump through the app, select Semi-Automation and have an operator arm manual dosing at the Pi."
     : /DISARMED/i.test(data.pumpAutomation?.hardwareStatus ?? "")
       ? "The pump gateway is disarmed. A supervised circulation flow check and rearm are required before app dosing."
       : canConfirm ? "Choose one recommended pump; the Pi checks live readings again before dosing."
         : data.mode === "Full Automation" ? "Full Automation uses fresh readings and the saved pulse limits."
           : "A pump dose is available only when fresh readings, circulation, and safety checks allow it.";
-  const fullMode = data.requestedMode === "Full Automation"
-    ? "Requested Full Automation resumes after recovery if the gateway remains armed."
-    : "After recovery, select Full Automation to resume automatic dosing.";
+  const fullMode = data.pumpAutomation?.manualDosingArmed
+    ? "After recovery, disarm manual dosing and rearm circulation flow before returning to Full Automation."
+    : data.requestedMode === "Full Automation"
+      ? "Requested Full Automation resumes after recovery if the gateway remains flow-armed."
+      : "After recovery, select Full Automation to resume automatic dosing.";
   return `<section class="correction-plan" aria-label="Live correction guidance"><header><div><p class="eyebrow">LIVE CORRECTION GUIDANCE</p><h2>What the readings need</h2></div><a href="#History">View pump dosing history</a></header>
     ${manualRequest}
     ${actions || highEc ? `<ul>${actions}${highEc}</ul>` : `<p>No pH or EC pump correction is recommended from these readings.</p>`}
@@ -760,7 +766,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=63", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=64", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

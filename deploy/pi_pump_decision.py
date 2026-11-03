@@ -63,6 +63,34 @@ def _sensor_fault(sensor):
                 and not isinstance(failures, bool) and failures >= 2))
 
 
+def manual_correction(sensors, requested_pump, last_dose_elapsed_seconds,
+                      calibrated_dose_seconds):
+    """One farmer-selected correction from a fresh matching sensor; no GPIO."""
+    if requested_pump not in PUMP_BY_ACTION.values() or not isinstance(sensors, dict):
+        return None
+    if requested_pump == "pump1":
+        sensor = sensors.get("ec")
+        action = "nutrient_dosing"
+        eligible = (_sensor_ready(sensor, "value_mScm")
+                    and sensor["value_mScm"] < 1.2)
+    else:
+        sensor = sensors.get("ph")
+        action = "ph_up" if requested_pump == "pump2" else "ph_down"
+        eligible = (_sensor_ready(sensor, "value")
+                    and (sensor["value"] < 5.5 if requested_pump == "pump2"
+                         else sensor["value"] > 6.5))
+    if not eligible:
+        return None
+    mixed = (last_dose_elapsed_seconds is None
+             or (_finite(last_dose_elapsed_seconds)
+                 and last_dose_elapsed_seconds >= MIX_SECONDS))
+    seconds = (calibrated_dose_seconds.get(requested_pump)
+               if isinstance(calibrated_dose_seconds, dict) else None)
+    if not mixed or not _finite(seconds) or not 0 < seconds <= MAX_RUN_SECONDS:
+        return None
+    return action, requested_pump, seconds, seconds * ASSUMED_FLOW_ML_PER_SECOND
+
+
 def decide(*, selected_mode, override_latched, request_full, sensors,
            snapshot_age_seconds, water_class, camera_fault, vision_fault,
            last_dose_elapsed_seconds, calibrated_dose_seconds,

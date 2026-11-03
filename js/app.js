@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=61";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=61";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=62";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=62";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -336,6 +336,40 @@ function bindSmsSettingsButton(settings, data) {
   });
 }
 
+function correctionGuidance(data) {
+  if (!data.online || data.stale) return "";
+  const recommendations = data.pumpAutomation?.recommendations ?? [];
+  const choices = [
+    ["pH-Up dosing", "pump2", "pH Up", "pH", "5.5–6.5"],
+    ["pH-Down dosing", "pump3", "pH Down", "pH", "5.5–6.5"],
+    ["EC nutrient dosing", "pump1", "Nutrients", "EC", "1.2–1.8 mS/cm"]
+  ].filter(([recommendation]) => recommendations.includes(recommendation));
+  const sensorReading = (name) => {
+    const sensor = data.sensors.find((item) => item.label === name);
+    const value = Number(sensor?.value);
+    return sensor && Number.isFinite(value) && !["Recovering", "Faulty Sensors", "Stale"].includes(sensor.status)
+      ? `${sensor.value}${sensor.unit ? ` ${sensor.unit}` : ""}` : "Unavailable";
+  };
+  const actions = choices.map(([, pump, label, sensor, target]) => `<li><strong>Pump ${pump.slice(-1)} · ${safe(label)}</strong><span>Current ${safe(sensor)}: ${safe(sensorReading(sensor))} · Optimal ${safe(target)}</span></li>`).join("");
+  const highEc = recommendations.includes("High EC: manual inspection; correction procedure pending")
+    ? "<li><strong>High EC · manual inspection</strong><span>No automatic correction pump is configured for high EC.</span></li>" : "";
+  const canConfirm = data.pumpAutomation?.confirmationAvailable === true;
+  const buttons = canConfirm ? `<div class="dose-choice-list">${choices.map(([, pump, label]) => `<button data-confirm-dose data-pump="${pump}" data-pump-label="${safe(label)}" type="button" class="primary">Confirm ${safe(label)}</button>`).join("")}</div>` : "";
+  const blocked = data.pumpAutomation?.circulationStopRequired
+    ? "Critical or faulty condition: circulation and app dosing are stopped. Verify and correct the water under supervision, then recheck the sensors and rearm circulation when safe."
+    : /DISARMED/i.test(data.pumpAutomation?.hardwareStatus ?? "")
+      ? "The pump gateway is disarmed. A supervised circulation flow check and rearm are required before app dosing."
+      : canConfirm ? "Choose one recommended pump; the Pi checks live readings again before dosing."
+        : data.mode === "Full Automation" ? "Full Automation uses fresh readings and the saved pulse limits."
+          : "A pump dose is available only when fresh readings, circulation, and safety checks allow it.";
+  const fullMode = data.requestedMode === "Full Automation"
+    ? "Requested Full Automation resumes after recovery if the gateway remains armed."
+    : "After recovery, select Full Automation to resume automatic dosing.";
+  return `<section class="correction-plan" aria-label="Live correction guidance"><header><div><p class="eyebrow">LIVE CORRECTION GUIDANCE</p><h2>What the readings need</h2></div><a href="#History">View pump dosing history</a></header>
+    ${actions || highEc ? `<ul>${actions}${highEc}</ul>` : `<p>No pH or EC pump correction is recommended from these readings.</p>`}
+    <p class="correction-hold">${safe(blocked)} ${safe(fullMode)}</p>${buttons}</section>`;
+}
+
 function renderDashboard(data) {
   const time = niceTime(data.updatedAt);
   const content = `<section class="overview" aria-label="System overview">
@@ -343,14 +377,7 @@ function renderDashboard(data) {
       <button data-mode-button class="mode" type="button"><span aria-hidden="true">⚙</span><div><span class="meta">ACTIVE MODE</span><strong>${safe(data.mode)}</strong><small>Requested: ${safe(data.requestedMode || data.mode)}</small></div></button>
     </section>
     ${data.modeOverride ? `<aside class="safety-note" role="status"><b>Safety override active</b><span>${safe(data.modeOverride)}</span></aside>` : ""}
-    ${data.pumpAutomation?.confirmationAvailable && !data.stale && data.online ? (() => {
-      const choices = [
-        ["pH-Up dosing", "pump2", "pH Up"],
-        ["pH-Down dosing", "pump3", "pH Down"],
-        ["EC nutrient dosing", "pump1", "add nutrients"]
-      ].filter(([recommendation]) => data.pumpAutomation.recommendations.includes(recommendation));
-      return `<aside class="safety-note dose-confirmation"><div><b>Farmer confirmation required</b><span>Select the specific recommended dose.</span></div><div class="dose-choice-list">${choices.map(([, pump, label]) => `<button data-confirm-dose data-pump="${pump}" data-pump-label="${label}" type="button" class="primary">${label}</button>`).join("")}</div></aside>`;
-    })() : ""}
+    ${correctionGuidance(data)}
     <section class="section-heading"><div><h2>Live readings</h2><p>${safe(sourceLabel(data))}</p></div><time datetime="${safe(data.updatedAt)}">Updated ${safe(time)}</time></section>
     <section class="sensor-grid" aria-label="Sensor readings">${data.sensors.map(renderCard).join("")}</section>
     <section class="insight-list" aria-label="System insights">
@@ -503,8 +530,9 @@ function renderHistory(data, history) {
     <section class="history-stats" aria-label="${safe(history.title)} summary"><article><span>Current</span><strong>${safe(valueWithUnit(history.current))}</strong></article><article><span>Average</span><strong>${safe(valueWithUnit(history.average))}</strong></article><article><span>Range</span><strong>${safe(valueWithUnit(history.minimum))} – ${safe(valueWithUnit(history.maximum))}</strong></article></section>
     <section class="recent-readings"><header><div><h2>Recent readings</h2><p>Newest valid samples in this range</p></div><span>${safe(history.unit || "Value")}</span></header>${recent ? `<ol>${recent}</ol>` : `<div class="empty-inline"><strong>No readings available</strong><span>Values will appear after the backend records valid measurements.</span></div>`}</section>
     <section class="incident-timeline"><header><div><h2>Problem timeline</h2><p>Detected problems and recorded recoveries</p></div><span>${history.incidents.length} event${history.incidents.length === 1 ? "" : "s"}</span></header>${incidents ? `<ol>${incidents}</ol>` : `<div class="empty-inline"><strong>No problem transitions in this range</strong><span>Sensor, vision, fusion, and system incidents will appear when they are detected or resolved.</span></div>`}</section>
-    <section class="incident-timeline pump-history"><header><div><h2>Pump dosing history</h2><p>Pump 1 nutrients, Pump 2 pH Up, and Pump 3 pH Down</p></div><span>${history.pumpDoses?.length ?? 0} dose${(history.pumpDoses?.length ?? 0) === 1 ? "" : "s"}</span></header>${pumpDoses ? `<ol>${pumpDoses}</ol>` : `<div class="empty-inline"><strong>No pump doses in this range</strong><span>Completed automatic and farmer-confirmed doses will appear here.</span></div>`}</section>`;
+    <section class="incident-timeline pump-history"><header><div><h2>Pump dosing history</h2><p>Last 7 days · Pump 1 nutrients, Pump 2 pH Up, Pump 3 pH Down</p></div><span>${history.pumpDoses?.length ?? 0} dose${(history.pumpDoses?.length ?? 0) === 1 ? "" : "s"}</span></header>${pumpDoses ? `<ol>${pumpDoses}</ol>` : `<div class="empty-inline"><strong>No recorded pump doses in the last 7 days</strong><span>Only doses recorded by the automatic gateway appear here; manual hardware tests are not logged as app doses.</span></div>`}</section>`;
   app.innerHTML = renderShell(content, data);
+  app.querySelector(".page-title")?.after(app.querySelector(".pump-history"));
   document.querySelectorAll("[data-history-range]").forEach((button) => button.addEventListener("click", () => {
     historyRange = HISTORY_RANGES.includes(button.dataset.historyRange) ? button.dataset.historyRange : "Today";
     render();
@@ -728,7 +756,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=61", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=62", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

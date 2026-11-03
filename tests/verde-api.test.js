@@ -545,6 +545,20 @@ test("dedicated pump history includes farmer-confirmed doses beyond recent gener
   assert.equal(history.pumpDoses[0].estimatedMl, 1.23);
 });
 
+test("Today sensor view still shows last week's recorded pump doses", () => {
+  const now = new Date("2026-11-03T07:00:00Z");
+  const olderDose = { id: 20, timestamp: "2026-10-29T08:11:57Z", category: "actuator",
+    message: "DOSED", payload: JSON.stringify({ status: "DOSED",
+      value: { pump: "pump3", seconds: 4.5, estimated_ml: 3.69 },
+      detail: "Farmer confirmed ph_down" }) };
+  const history = normalizeBackendHistory([], "Today", now, null, [], [olderDose]);
+  assert.equal(history.sampleCount, 0);
+  assert.equal(history.pumpDoses.length, 1);
+  assert.equal(history.pumpDoses[0].action, "ph_down");
+  assert.equal(history.pumpDoses[0].mode, "Semi-Automation Mode");
+  assert.equal(history.pumpDoses[0].requestedSeconds, 4.5);
+});
+
 test("harvest detection is a notification, never a vision warning", () => {
   const [notice] = normalizeBackendEvents([{
     id: 12, timestamp: "2026-10-28T07:12:00+08:00",

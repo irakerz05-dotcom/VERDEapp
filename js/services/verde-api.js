@@ -455,6 +455,7 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
       recommendations: Array.isArray(state.automation.recommendations)
         ? state.automation.recommendations : [],
       confirmationAvailable: state.automation.confirmation_available === true,
+      circulationStopRequired: state.automation.circulation_stop_required === true,
       hardwareStatus: state.automation.hardware_status || "Unavailable",
       actuationEnabled: state.automation.actuation_enabled === true,
       doseSettings: state.automation.dose_settings || null
@@ -563,6 +564,7 @@ export function normalizeBackendHistory(rows, range = "Today", now = new Date(),
   eventRows = [], pumpEventRows = eventRows) {
   const selectedRange = ["Today", "24 Hours", "7 Days"].includes(range) ? range : "Today";
   const start = historyStart(selectedRange, now);
+  const pumpStart = historyStart("7 Days", now);
   const validRows = (Array.isArray(rows) ? rows : [])
     .filter((row) => Number.isFinite(Date.parse(row?.timestamp)) && Date.parse(row.timestamp) >= start)
     .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
@@ -575,9 +577,9 @@ export function normalizeBackendHistory(rows, range = "Today", now = new Date(),
     && Date.parse(event.createdAt) >= start);
   const pumpDoses = normalizeBackendEvents(pumpEventRows)
     .filter((event) => event.pumpDose && Number.isFinite(Date.parse(event.createdAt))
-      && Date.parse(event.createdAt) >= start)
+      && Date.parse(event.createdAt) >= pumpStart)
     .map((event) => ({ ...event.pumpDose, timestamp: event.createdAt,
-      label: historyLabel(event.createdAt, selectedRange) }));
+      label: historyLabel(event.createdAt, "7 Days") }));
   return historyView(selectedRange, metrics, selectedMetric, incidents, pumpDoses);
 }
 
@@ -629,9 +631,10 @@ export function normalizeBackendEvents(rows) {
       pumpDose: category === "actuator" && ["pump1", "pump2", "pump3"].includes(dosePayload.pump)
         ? {
           pump: dosePayload.pump,
-          action: String(dosePayload.action ?? "dose"),
-          mode: dosePayload.mode ?? null,
-          requestedSeconds: finiteNumber(dosePayload.requested_seconds),
+          action: String(dosePayload.action ??
+            String(payload.detail ?? "").match(/\b(ph_up|ph_down|nutrient_dosing)\b/)?.[1] ?? "dose"),
+          mode: dosePayload.mode ?? (row.message === "DOSED" ? "Semi-Automation Mode" : null),
+          requestedSeconds: finiteNumber(dosePayload.requested_seconds ?? dosePayload.seconds),
           estimatedMl: finiteNumber(dosePayload.estimated_ml)
         } : null
     };
@@ -693,7 +696,7 @@ export class VerdeApi {
   async getHistory(range = "Today", selectedMetric = null) {
     const now = new Date();
     const selectedRange = ["Today", "24 Hours", "7 Days"].includes(range) ? range : "Today";
-    const since = new Date(historyStart(selectedRange, now)).toISOString();
+    const since = new Date(historyStart("7 Days", now)).toISOString();
     const [historyPayload, eventPayload, pumpPayload] = await Promise.all([
       this.request(`/api/history?range=${encodeURIComponent(selectedRange)}`),
       this.request("/api/events"),

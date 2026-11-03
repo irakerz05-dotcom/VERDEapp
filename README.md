@@ -695,3 +695,11 @@ gateway stays disarmed and circulation stopped until a supervised `arm` with
 physical flow confirmation. On service restart the requested mode starts in
 Semi, so Full must be selected again on the dashboard after checking live
 readings and circulation flow.
+
+The dashboard displays live pH/EC correction recommendations even while a
+Critical condition blocks dosing. Critical or faulty conditions still stop
+circulation and require correction outside the app. After fresh readings clear
+the stop, supervise the gateway rearm and request Full mode. The History page
+shows recorded Pump 1–3 doses from the last seven days above its sensor chart,
+regardless of the chart's Today/24 Hours/7 Days filter. Direct manual-controller
+hardware tests are not recorded as app doses.

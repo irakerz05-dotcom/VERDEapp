@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=64";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=64";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=65";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=65";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -181,7 +181,7 @@ function bindDoseConfirmation(data) {
     showModal({
       title: `Confirm ${button.dataset.pumpLabel}?`,
       text: data.pumpAutomation?.manualDosingArmed
-        ? `Circulation is stopped. The Pi will recheck the matching sensor, then run only ${button.dataset.pumpLabel} using its saved volume (up to ${Number(data.pumpAutomation?.doseSettings?.max_pulse_ml || 3.69).toFixed(2)} mL). Watch the outlet, mix the reservoir manually, and check with a separate meter before another dose.`
+        ? `Circulation is stopped. The Pi will recheck the matching sensor, then run only ${button.dataset.pumpLabel} ${data.pumpAutomation?.criticalManualDose ? "for 4.5 seconds (estimated 3.69 mL)" : `using its saved volume (up to ${Number(data.pumpAutomation?.doseSettings?.max_pulse_ml || 3.69).toFixed(2)} mL)`}. Watch the outlet, mix the reservoir manually, and check with a separate meter before another dose. A new reading and another confirmation are required for any repeat.`
         : `The Pi will recheck the sensors, then run only ${button.dataset.pumpLabel} using its saved volume (up to ${Number(data.pumpAutomation?.doseSettings?.max_pulse_ml || 3.69).toFixed(2)} mL). Allow at least 1 minute of mixing before another dose.`,
       confirmText: "Confirm dose",
       onConfirm: async () => {
@@ -361,7 +361,9 @@ function correctionGuidance(data) {
   const buttons = canConfirm ? `<div class="dose-choice-list">${choices.map(([, pump, label]) => `<button data-confirm-dose data-pump="${pump}" data-pump-label="${safe(label)}" type="button" class="primary">${critical ? "Manually dose" : "Confirm"} ${safe(label)}</button>`).join("")}</div>` : "";
   const manualRequest = critical ? `<p class="correction-request"><strong>Manual correction required for Critical readings.</strong> ${choices.length ? "The pumps named below indicate which solution is needed. Correct one condition at a time under supervision and remeasure after mixing." : "No dosing pump is recommended from the available readings; inspect the Critical condition."}</p>` : "";
   const blocked = data.pumpAutomation?.manualDosingArmed
-    ? "Circulation is stopped and automatic dosing is off. Select one recommended pump for a supervised pulse, then mix and verify with a separate meter before another dose."
+    ? data.pumpAutomation?.manualWaitReason
+      ? `Circulation is stopped and automatic dosing is off. ${data.pumpAutomation.manualWaitReason}. Mix and verify with a separate meter before another dose.`
+      : `Circulation is stopped and automatic dosing is off. ${data.pumpAutomation?.criticalManualDose ? "Each confirmed Critical correction runs for 4.5 seconds (estimated 3.69 mL)." : "The selected pump uses its saved dose volume."} Select one recommended pump, then mix and verify with a separate meter. If the next fresh reading still needs correction, confirm another dose.`
     : data.pumpAutomation?.circulationStopRequired
       ? "Critical or faulty condition: circulation is stopped. To dose a recommended pump through the app, select Semi-Automation and have an operator arm manual dosing at the Pi."
     : /DISARMED/i.test(data.pumpAutomation?.hardwareStatus ?? "")
@@ -641,7 +643,7 @@ function renderSettings(data, smsSettings = { supported: false }) {
     <section class="settings-list">
       <article><div><h2>Install on this device</h2><p>Installation requires the private HTTPS address. Live readings still require a connection to the Raspberry Pi.</p></div><button data-install-button type="button" class="secondary"${installed ? " disabled" : ""}>${installLabel}</button></article>
       <article><div><h2>Operating mode</h2><p>Active: ${safe(data.mode)} · Requested: ${safe(data.requestedMode || data.mode)}. Safety validation is enforced by the backend.</p></div><button data-mode-button type="button" class="secondary">Change mode</button></article>
-      <article><div><h2>Pumps 1–3 dose volumes</h2><p>${safe(pumpSummary)}</p><p>Settings can be changed in Semi-Automation. Saving does not run a pump.</p></div>${pumpSettings?.volumes_ml ? '<button data-pump-dose-settings type="button" class="secondary">Adjust volumes</button>' : ""}</article>
+      <article><div><h2>Pumps 1–3 dose volumes</h2><p>${safe(pumpSummary)}</p><p>Settings can be changed in Semi-Automation. Critical manual correction uses a fixed 4.5-second pulse (estimated 3.69 mL); other doses use the saved volumes. Saving does not run a pump.</p></div>${pumpSettings?.volumes_ml ? '<button data-pump-dose-settings type="button" class="secondary">Adjust volumes</button>' : ""}</article>
       <article><div><h2>GSM SMS alerts</h2><p>${safe(smsSummary)}</p><p>Mode: ${safe(data.settings.gsmStatus || "Unavailable")}</p></div>${smsSupported ? '<button data-sms-settings type="button" class="secondary">Configure</button>' : ""}</article>
       <article><div><h2>Application version</h2><p>VERDE monitoring PWA</p></div><span>${safe(data.settings.version)}</span></article>
     </section>`;
@@ -766,7 +768,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=64", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=65", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

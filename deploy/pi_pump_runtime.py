@@ -21,6 +21,7 @@ from app.components import Result
 GATEWAY = "/usr/local/libexec/verde_auto_pumps.py"
 COMMAND = ("/usr/bin/sudo", "-n", GATEWAY)
 CORRECTIVE_RECOMMENDATIONS = ("pH-Up dosing", "pH-Down dosing", "EC nutrient dosing")
+CRITICAL_MANUAL_SECONDS = 4.5
 
 
 def confirmation_available(automation):
@@ -38,6 +39,24 @@ def snapshot_age_seconds(snapshot):
         return (datetime.now(timezone.utc) - timestamp.astimezone(timezone.utc)).total_seconds()
     except (KeyError, TypeError, ValueError):
         return math.inf
+
+
+def manual_wait_reason(gateway, sample_age):
+    elapsed = gateway.get("last_dose_elapsed_seconds")
+    if elapsed is None:
+        return None
+    if not isinstance(elapsed, (int, float)) or not math.isfinite(elapsed) or elapsed < 0:
+        return "Dose timing is unavailable"
+    if elapsed < 60:
+        return "Wait at least 60 seconds after the previous dose"
+    if not math.isfinite(sample_age) or sample_age >= elapsed:
+        return "Wait for a new sensor reading after the previous dose"
+    return None
+
+
+def critical_manual_dose(automation, water_value):
+    return ("Critical" in str(automation.get("override_reason") or "")
+            or water_value == "Critical")
 
 
 class PumpRuntime:
@@ -96,9 +115,16 @@ class PumpRuntime:
             if manual_stop or gateway.get("arm_mode") == "manual":
                 if gateway.get("arm_mode") != "manual" or gateway.get("circulation") != "STOP":
                     return Result("BLOCKED — MANUAL DOSING ARM REQUIRED")
+                wait_reason = manual_wait_reason(gateway, snapshot_age_seconds(live_snapshot))
+                if wait_reason:
+                    return Result("BLOCKED — WAIT FOR NEXT CHECK", detail=wait_reason)
+                critical = critical_manual_dose(
+                    automation, state.get("water_quality_experimental", {}).get("value"))
+                durations = ({pump: CRITICAL_MANUAL_SECONDS for pump in ("pump1", "pump2", "pump3")}
+                             if critical else dose_durations(load_dose_settings()))
                 proposal = manual_correction(
                     sensors, requested_pump, gateway.get("last_dose_elapsed_seconds"),
-                    dose_durations(load_dose_settings()))
+                    durations)
                 if proposal is None:
                     return Result("BLOCKED — NO FRESH MATCHING READING OR MIXING WAIT")
                 action, pump, seconds, volume = proposal
@@ -170,9 +196,13 @@ class PumpRuntime:
                 self.command("safe-off")
                 output["active_mode"] = SEMI
                 output["actuation_enabled"] = False
+                output["manual_wait_reason"] = manual_wait_reason(
+                    gateway, snapshot_age_seconds(live_snapshot))
+                output["critical_manual_dose"] = critical_manual_dose(
+                    output, getattr(water, "value", None))
                 output["confirmation_available"] = output.get("selected_mode") == SEMI and any(
                     item in CORRECTIVE_RECOMMENDATIONS
-                    for item in output.get("recommendations", []))
+                    for item in output.get("recommendations", [])) and not output["manual_wait_reason"]
                 output["hardware_status"] = "MANUAL DOSING ARMED — CIRCULATION STOPPED"
                 output["outputs"] = {name: "OFF" for name in OUTPUTS}
                 return output

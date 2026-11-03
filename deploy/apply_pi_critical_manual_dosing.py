@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path("/home/verde/VERDE-Sensor-Integration")
 GATEWAY = Path("/usr/local/libexec/verde_auto_pumps.py")
 SOURCES = {
-    "pump_runtime.py": ("pi_pump_runtime.py", "7a7e6925bf13c61d71b2a65be097d503954512efdee706cd790a07bee17024a3"),
+    "pump_runtime.py": ("pi_pump_runtime.py", "e2b014bb47456808a414305977616ff7b78d30efc18b80fd369710cff5fd2d9d"),
     "pump_decision.py": ("pi_pump_decision.py", "17bcb66433caa602c8cba2ae72b20e1e22ffd47847c805588db5ef538c018635"),
 }
 

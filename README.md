@@ -704,7 +704,11 @@ pump in Semi-Automation, and confirm a bounded pulse. The service rechecks the
 matching pH or EC sensor immediately before the command. A faulty or stale
 matching sensor cannot authorize its pump. The operator must watch delivery,
 mix the reservoir manually, and verify with a separate meter before another
-dose. The gateway retains the 4.5-second maximum pulse, one pump at a time,
+dose. A Critical manual correction uses a fixed 4.5-second pulse, estimated at
+3.69 mL using the provisional 0.82 mL/s flow rate; the delivered volume must
+be measured separately. If a new post-dose reading still calls for correction,
+the farmer must confirm another dose. A pre-dose reading cannot authorize a
+repeat. The gateway retains the 4.5-second maximum pulse, one pump at a time,
 and a 60-second minimum gap. Manual arming never permits automatic dosing or
 starts circulation. After fresh readings clear the stop, disarm manual dosing,
 physically verify flow, and use the normal `arm` command before selecting Full.

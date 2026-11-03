@@ -83,7 +83,7 @@ WEB_EVENT_ROUTE = '''            if path in ("/api/events", "/api/history"):
                                       {"rows": rows or [], "error": service.database_error})'''
 WEB_PUMP_ROUTE = '''            if path == "/api/pump/history":
                 try:
-                    query = parse_qs(urlsplit(self.path).query, strict_parsing=True)
+                    query = parse_pump_qs(urlsplit(self.path).query, strict_parsing=True)
                     values = query.get("since", [])
                     if len(query) != 1 or len(values) != 1:
                         raise ValueError("One since timestamp is required")
@@ -100,6 +100,9 @@ WEB_PUMP_ROUTE = '''            if path == "/api/pump/history":
                     return self.reply(200 if rows is not None else 503,
                                       {"rows": rows or [], "error": service.database_error})
 ''' + WEB_EVENT_ROUTE
+WEB_PUMP_ROUTE_V1 = WEB_PUMP_ROUTE.replace("parse_pump_qs(", "parse_qs(")
+WEB_IMPORT_V1 = "from urllib.parse import parse_qs, urlsplit\n"
+WEB_IMPORT_V2 = "from urllib.parse import parse_qs as parse_pump_qs, urlsplit\n"
 DB_RECENT = '''    def recent(self, table, limit=30):
         if table not in ("events", "snapshots"):
             raise ValueError("Unknown table")
@@ -163,12 +166,17 @@ def patch_service(source):
 def patch_web(source):
     if WEB_NEW not in source:
         source = replace_exact(source, WEB_OLD, WEB_NEW, "confirmation route")
-    if WEB_PUMP_ROUTE not in source:
+    if WEB_PUMP_ROUTE_V1 in source:
+        source = replace_exact(source, WEB_IMPORT_V1, WEB_IMPORT_V2,
+                               "pump history import shadow fix")
+        source = replace_exact(source, WEB_PUMP_ROUTE_V1, WEB_PUMP_ROUTE,
+                               "pump history parser shadow fix")
+    elif WEB_PUMP_ROUTE not in source:
         source = replace_exact(source, "import sqlite3\n",
                                "import sqlite3\nfrom datetime import datetime, timedelta, timezone\n",
                                "web datetime import")
         source = replace_exact(source, "from urllib.parse import urlsplit\n",
-                               "from urllib.parse import parse_qs, urlsplit\n",
+                               WEB_IMPORT_V2,
                                "web query import")
         source = replace_exact(source, WEB_EVENT_ROUTE, WEB_PUMP_ROUTE,
                                "pump history route")

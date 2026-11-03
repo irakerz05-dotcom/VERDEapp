@@ -9,7 +9,8 @@ from pathlib import Path
 from deploy.apply_pi_pump_policy_v2 import (
     CONFIRM_NEW, CONFIRM_OLD, DB_PUMP_EVENTS, DB_RECENT,
     EARLY_NEW, EARLY_OLD, MARKER, RUNTIME_OLD, WEB_EVENT_ROUTE,
-    WEB_NEW, WEB_OLD, WEB_PUMP_ROUTE, patch_database, patch_service, patch_web,
+    WEB_IMPORT_V1, WEB_IMPORT_V2, WEB_NEW, WEB_OLD, WEB_PUMP_ROUTE,
+    WEB_PUMP_ROUTE_V1, patch_database, patch_service, patch_web,
 )
 
 
@@ -47,6 +48,7 @@ from urllib.parse import urlsplit
 
 class Handler:
     def do_GET(self):
+        from urllib.parse import parse_qs
         if True:
 ''' + WEB_EVENT_ROUTE + '''
 
@@ -75,6 +77,13 @@ class PatchTests(unittest.TestCase):
         self.assertIn(DB_PUMP_EVENTS, database)
         self.assertEqual(patch_web(web), web)
         self.assertEqual(patch_database(database), database)
+
+    def test_installed_history_route_avoids_local_parser_import_shadow(self):
+        installed = patch_web(WEB)
+        installed = installed.replace(WEB_IMPORT_V2, WEB_IMPORT_V1)
+        installed = installed.replace(WEB_PUMP_ROUTE, WEB_PUMP_ROUTE_V1)
+        self.assertEqual(patch_web(installed), patch_web(WEB))
+        self.assertIn(WEB_IMPORT_V2, patch_web(installed))
 
     def test_pump_history_query_keeps_older_doses_beyond_recent_event_limit(self):
         namespace = {"sqlite3": sqlite3}

@@ -70,10 +70,16 @@ class LiveModeTests(unittest.TestCase):
         self.assertTrue(decide(snapshot=live)["override"])
         self.assertTrue(decide(snapshot=live)["circulation_stop_required"])
 
-    def test_missing_plant_classification_is_hold_not_fault(self):
-        result = decide(plant=SimpleNamespace(value=None, status="NO DETECTION"))
+    def test_missing_plant_classification_does_not_block_water_correction(self):
+        live = snapshot()
+        live["sensors"]["ph"].update(value=6.8, classification="SUBOPTIMAL")
+        result = decide(snapshot=live,
+                        water=SimpleNamespace(status="EXPERIMENTAL", value="Suboptimal"),
+                        plant=SimpleNamespace(value=None, status="UNVERIFIED"))
         self.assertFalse(result["override"])
-        self.assertIn("plant classification unavailable", result["hold_reason"])
+        self.assertIsNone(result["hold_reason"])
+        self.assertEqual(result["active_mode"], FULL)
+        self.assertIn("pH-Down dosing", result["recommendations"])
 
     def test_missing_required_sensor_stops_circulation(self):
         live = snapshot()

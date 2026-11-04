@@ -726,3 +726,13 @@ restart `verde.service`. The installers back up changed files and issue no dose.
 The separate `sudo /usr/local/libexec/verde_auto_pumps.py arm-manual` command
 asks for a physical supervision acknowledgment and leaves circulation STOP.
 Use `disarm` to end the manual session.
+
+For water dosing, an unclassified plant is not a water-sensor fault. The guarded
+`deploy/apply_pi_water_only_pump_hold.py` update removes that plant-result hold
+while retaining Critical sensor and Faulty Vision overrides. With Full mode
+requested and the gateway flow-armed, a fresh Suboptimal low EC reading can
+request Pump 1, low pH Pump 2, or high pH Pump 3. A fresh Optimal water reading
+requests no dose. Critical or faulty readings switch the active mode to Semi
+and stop circulation. Once fresh readings clear, the active mode returns to
+the requested Full mode automatically; a farmer-selected Semi mode stays Semi.
+The gateway still enforces one bounded pulse at a time and its mixing wait.

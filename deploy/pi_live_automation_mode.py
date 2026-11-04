@@ -110,8 +110,8 @@ def evaluate_live(selected_mode, snapshot, water, plant, camera, limits,
         circulation_stop_reasons.append("system fault")
     if _value(water) not in ("Optimal", "Suboptimal", "Critical"):
         holds.append("water classification unavailable")
-    if _value(plant) not in ("Healthy", "Yellowing", "Wilting", "Harvest-Ready"):
-        holds.append("plant classification unavailable")
+    # Water correction depends on fresh water sensors. A camera/vision fault
+    # still overrides above, but an unclassified plant is not a pump fault.
     override = bool(faults)
     active = SEMI if override else selected_mode
     ph = sensors.get("ph") or {}

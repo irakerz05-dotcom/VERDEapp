@@ -420,7 +420,7 @@ export function normalizeSimulatedPest(payload, now = Date.now()) {
   return {
     detected: payload.simulated_pest_detected,
     status: payload.simulated_pest_detected ? "Simulated Pest Detected" : "No Simulated Pest Detected",
-    detail: `${count} printed insect prop${count === 1 ? "" : "s"} detected in a camera photo checked at ${timestamp}. Prototype only; no GSM or automation action.`,
+    detail: `${count} printed insect prop${count === 1 ? "" : "s"} detected in a camera photo checked at ${timestamp}.`,
     frameUrl: `/simulated-pest/latest-annotated.jpg?v=${encodeURIComponent(payload.checked_at_utc)}`
   };
 }

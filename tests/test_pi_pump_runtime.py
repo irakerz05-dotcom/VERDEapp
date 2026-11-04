@@ -92,6 +92,20 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(calls, [("status",), ("dose", "pump2", "1.00000000")])
         self.assertEqual(result["dose_settings"]["volumes_ml"]["pump2"], 0.82)
 
+    def test_full_mode_chooses_nutrients_after_ph_dose_when_both_are_low(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        gateway = {"armed": True, "arm_mode": "flow", "circulation": "RUN",
+                   "in_progress": False, "last_dose_elapsed_seconds": 70,
+                   "last_dose_pump": "pump3", "ml_in_last_24h": {}}
+        runtime.command = lambda *args: calls.append(args) or gateway
+        automation, snapshot, water, plant, camera = inputs()
+        snapshot["sensors"]["ph"].update(value=7.2, classification="SUBOPTIMAL")
+        snapshot["sensors"]["ec"].update(value_mScm=1.0, classification="SUBOPTIMAL")
+        result = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertEqual(result["dose_event"]["pump"], "pump1")
+        self.assertEqual(calls, [("status",), ("dose", "pump1", "4.50000000")])
+
     def test_vision_hold_allows_circulation_but_not_dose(self):
         runtime = load_runtime().PumpRuntime()
         calls = []

@@ -157,6 +157,7 @@ def set_circulation(controller, state):
 
 
 def status(controller, data, clock):
+    latest = max(data["events"], key=lambda event: event["at"], default=None)
     return {
         "armed": armed(),
         "arm_mode": arm_mode(),
@@ -166,6 +167,7 @@ def status(controller, data, clock):
                         for name, pin in controller.DOSING_PINS.items()},
         "ml_in_last_24h": totals(data),
         "last_dose_elapsed_seconds": last_elapsed(data, clock),
+        "last_dose_pump": latest["pump"] if latest else None,
         "in_progress": data["in_progress"],
         "limits_ml_in_24h": None,
     }

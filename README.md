@@ -716,6 +716,11 @@ If Full was requested, fresh Optimal or Suboptimal readings and a post-dose
 mixing wait return the gateway to flow mode and the active mode to Full.
 A manual session started without prior flow confirmation remains Semi until
 an operator physically verifies flow with the normal `arm` command.
+When pH and EC are both Suboptimal in Full mode, the first eligible pulse
+corrects pH. If EC is still below 1.2 mS/cm after that pulse, Pump 1 gets the
+next eligible turn after the 60-second gateway wait and a newer sensor sample.
+Only one pump runs at a time. The app remains in Semi if the operator selected
+Semi to inspect an unexpected pH response.
 The History page
 shows recorded Pump 1–3 doses from the last seven days above its sensor chart,
 regardless of the chart's Today/24 Hours/7 Days filter. Direct manual-controller

@@ -113,6 +113,8 @@ class GatewayTests(unittest.TestCase):
                 saved = json.loads(state_path.read_text())
                 self.assertFalse(saved["in_progress"])
                 self.assertAlmostEqual(driver.totals(saved)["pump1"], 3.69)
+                self.assertEqual(driver.status(controller, saved, 1200.0)["last_dose_pump"],
+                                 "pump1")
                 with self.assertRaisesRegex(RuntimeError, "mixing wait"):
                     driver.dose(controller, saved, 1100.0, "pump1", 4.5)
                 saved["events"][0]["ml"] = 7.0

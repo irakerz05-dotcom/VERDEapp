@@ -66,6 +66,9 @@ class PumpDecisionTests(unittest.TestCase):
         self.assertEqual(choose(sensors=sensors(ph=5.2),
                                 last_dose_elapsed_seconds=60).pump, "pump2")
         self.assertIsNone(choose(sensors=sensors(ph=5.2),
+                                 last_dose_elapsed_seconds=60,
+                                 snapshot_age_seconds=61).pump)
+        self.assertIsNone(choose(sensors=sensors(ph=5.2),
                                  calibrated_dose_seconds={}).pump)
         self.assertIsNone(choose(sensors=sensors(ph=5.2),
                                  calibrated_dose_seconds={"pump2": 5.1}).pump)
@@ -169,6 +172,21 @@ class PumpDecisionTests(unittest.TestCase):
         self.assertEqual(choose(**base, requested_pump="pump1").pump, "pump1")
         self.assertIsNone(choose(**base, requested_pump="pump3").pump)
         self.assertEqual(choose(**base).pump, "pump2")
+
+    def test_low_ec_gets_next_automatic_pulse_after_ph_dose(self):
+        readings = sensors(ph=7.2, ec=1.0)
+        self.assertEqual(choose(sensors=readings).pump, "pump3")
+        self.assertIsNone(choose(sensors=readings, last_dose_pump="pump3",
+                                 last_dose_elapsed_seconds=59).pump)
+        after_ph = choose(sensors=readings, last_dose_pump="pump3",
+                          last_dose_elapsed_seconds=60)
+        self.assertEqual((after_ph.pump, after_ph.dose_action),
+                         ("pump1", "nutrient_dosing"))
+        self.assertEqual(choose(sensors=readings, last_dose_pump="pump1",
+                                last_dose_elapsed_seconds=60).pump, "pump3")
+        self.assertEqual(choose(sensors=sensors(ph=7.2, ec=1.4),
+                                last_dose_pump="pump3",
+                                last_dose_elapsed_seconds=60).pump, "pump3")
 
 
 if __name__ == "__main__":

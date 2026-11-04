@@ -254,6 +254,7 @@ class PumpRuntime:
                 camera_fault=(isinstance(camera, dict) and camera.get("status") == "FAULT / ERROR"),
                 vision_fault=(getattr(plant, "status", None) == "FAULT / ERROR"),
                 last_dose_elapsed_seconds=gateway.get("last_dose_elapsed_seconds"),
+                last_dose_pump=gateway.get("last_dose_pump"),
                 calibrated_dose_seconds=dose_durations(volumes),
                 circulation_flow_gpio_level="HIGH",
                 dosed_ml_by_pump=gateway.get("ml_in_last_24h"),

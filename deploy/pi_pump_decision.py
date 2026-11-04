@@ -95,7 +95,7 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
            snapshot_age_seconds, water_class, camera_fault, vision_fault,
            last_dose_elapsed_seconds, calibrated_dose_seconds,
            circulation_flow_gpio_level, dosed_ml_by_pump=None,
-           farmer_confirmed=False, requested_pump=None):
+           farmer_confirmed=False, requested_pump=None, last_dose_pump=None):
     """Return a proposed action; no state or hardware is changed.
 
     The farmer's selected mode is retained across a safety override. A prior
@@ -176,6 +176,12 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
         if ec < 1.2:
             eligible_actions.append("nutrient_dosing")
         # High EC has no deterministic correction pump.
+        # Give low EC the next pulse after a pH dose so repeated pH readings
+        # cannot starve Pump 1. The gateway still permits only one pump at once.
+        if (requested_pump is None and last_dose_pump in ("pump2", "pump3")
+                and "nutrient_dosing" in eligible_actions):
+            eligible_actions.remove("nutrient_dosing")
+            eligible_actions.insert(0, "nutrient_dosing")
         action = next((candidate for candidate in eligible_actions
                        if requested_pump is None
                        or PUMP_BY_ACTION[candidate] == requested_pump), None)
@@ -184,7 +190,8 @@ def decide(*, selected_mode, override_latched, request_full, sensors,
             duration = calibrated_dose_seconds.get(pump) if isinstance(calibrated_dose_seconds, dict) else None
             mixed = (last_dose_elapsed_seconds is None
                      or (_finite(last_dose_elapsed_seconds)
-                         and last_dose_elapsed_seconds >= MIX_SECONDS))
+                         and last_dose_elapsed_seconds >= MIX_SECONDS
+                         and snapshot_age_seconds < last_dose_elapsed_seconds))
             if (not mixed or not _finite(duration)
                     or not 0 < duration <= MAX_RUN_SECONDS):
                 action = pump = None

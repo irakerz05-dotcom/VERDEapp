@@ -227,6 +227,29 @@ class RuntimeTests(unittest.TestCase):
         self.assertAlmostEqual(result.value["estimated_ml"], 3.69)
         self.assertEqual(calls, [("status",), ("manual-dose", "pump3", "4.50000000")])
 
+    def test_full_request_remains_selected_during_critical_manual_correction(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        gateway = {"armed": True, "arm_mode": "manual", "circulation": "STOP",
+                   "auto_resume_available": True, "in_progress": False,
+                   "last_dose_elapsed_seconds": None}
+        runtime.command = lambda *args: calls.append(args) or gateway
+        automation, snapshot, water, plant, camera = inputs()
+        snapshot["sensors"]["ph"].update(value=4.0, classification="CRITICAL")
+        automation.update(active_mode=pi_pump_decision.SEMI, override=True,
+                          override_reason="ph Critical", circulation_stop_required=True,
+                          recommendations=["pH-Up dosing"])
+        water.value = "Critical"
+        displayed = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertTrue(displayed["confirmation_available"])
+        self.assertEqual(displayed["selected_mode"], pi_pump_decision.FULL)
+        calls.clear()
+        state = {"automation": displayed, "database": {"status": "AVAILABLE"},
+                 "water_quality_experimental": {"value": "Critical"}}
+        result = runtime.confirm(state, snapshot, "pump2")
+        self.assertEqual(result.status, "DOSED")
+        self.assertEqual(calls, [("status",), ("manual-dose", "pump2", "4.50000000")])
+
     def test_repeat_requires_mixing_wait_and_post_dose_sample(self):
         module = load_runtime()
         self.assertEqual(module.manual_wait_reason({"last_dose_elapsed_seconds": 59}, 1),
@@ -271,6 +294,54 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result["active_mode"], pi_pump_decision.SEMI)
         self.assertFalse(result["confirmation_available"])
         self.assertFalse(result["actuation_enabled"])
+
+    def test_full_mode_resumes_after_supervised_flow_manual_session(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        manual = {"armed": True, "arm_mode": "manual", "circulation": "STOP",
+                  "auto_resume_available": True, "in_progress": False,
+                  "last_dose_elapsed_seconds": 90}
+        flow = {"armed": True, "arm_mode": "flow", "circulation": "RUN",
+                "in_progress": False, "last_dose_elapsed_seconds": 90}
+
+        def command(*args):
+            calls.append(args)
+            return flow if args == ("status",) and ("resume-flow",) in calls else manual
+
+        runtime.command = command
+        automation, snapshot, water, plant, camera = inputs()
+        result = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertEqual(result["active_mode"], pi_pump_decision.FULL)
+        self.assertEqual(result["hardware_status"], "CONNECTED — GUARDED PUMP GATEWAY")
+        self.assertEqual(calls[:4], [("status",), ("safe-off",), ("resume-flow",), ("status",)])
+        self.assertEqual(calls[4][0:2], ("dose", "pump2"))
+
+    def test_manual_session_waits_for_new_sample_before_flow_resume(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        runtime.command = lambda *args: calls.append(args) or {
+            "armed": True, "arm_mode": "manual", "circulation": "STOP",
+            "auto_resume_available": True, "in_progress": False,
+            "last_dose_elapsed_seconds": 90}
+        automation, snapshot, water, plant, camera = inputs()
+        snapshot["timestamp"] = (datetime.now(timezone.utc) - timedelta(seconds=91)).isoformat()
+        result = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertEqual(result["active_mode"], pi_pump_decision.SEMI)
+        self.assertEqual(calls, [("status",), ("safe-off",)])
+
+    def test_critical_manual_session_cannot_resume_flow(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        runtime.command = lambda *args: calls.append(args) or {
+            "armed": True, "arm_mode": "manual", "circulation": "STOP",
+            "auto_resume_available": True, "in_progress": False,
+            "last_dose_elapsed_seconds": 90}
+        automation, snapshot, water, plant, camera = inputs()
+        automation.update(active_mode=pi_pump_decision.SEMI, override=True,
+                          circulation_stop_required=True)
+        result = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertEqual(result["active_mode"], pi_pump_decision.SEMI)
+        self.assertEqual(calls, [("status",), ("safe-off",)])
 
     def test_manual_arm_rejects_faulty_matching_sensor(self):
         runtime = load_runtime().PumpRuntime()

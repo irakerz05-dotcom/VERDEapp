@@ -98,7 +98,12 @@ class PumpRuntime:
         if requested_pump not in ("pump1", "pump2", "pump3"):
             return Result("BLOCKED — SELECT ONE PUMP")
         automation = state.get("automation", {}) if isinstance(state, dict) else {}
-        if automation.get("active_mode") != SEMI or automation.get("selected_mode") != SEMI:
+        critical_override = (automation.get("selected_mode") == FULL
+                             and automation.get("override") is True
+                             and automation.get("circulation_stop_required") is True
+                             and automation.get("critical_manual_dose") is True)
+        if automation.get("active_mode") != SEMI or (
+                automation.get("selected_mode") != SEMI and not critical_override):
             return Result("BLOCKED — SEMI MODE REQUIRED")
         if automation.get("confirmation_available") is not True:
             return Result("BLOCKED — NO CONFIRMABLE RECOMMENDATION")
@@ -194,18 +199,36 @@ class PumpRuntime:
                 return output
             if gateway.get("arm_mode") == "manual":
                 self.command("safe-off")
-                output["active_mode"] = SEMI
-                output["actuation_enabled"] = False
-                output["manual_wait_reason"] = manual_wait_reason(
-                    gateway, snapshot_age_seconds(live_snapshot))
-                output["critical_manual_dose"] = critical_manual_dose(
-                    output, getattr(water, "value", None))
-                output["confirmation_available"] = output.get("selected_mode") == SEMI and any(
-                    item in CORRECTIVE_RECOMMENDATIONS
-                    for item in output.get("recommendations", [])) and not output["manual_wait_reason"]
-                output["hardware_status"] = "MANUAL DOSING ARMED — CIRCULATION STOPPED"
-                output["outputs"] = {name: "OFF" for name in OUTPUTS}
-                return output
+                wait_reason = manual_wait_reason(gateway, snapshot_age_seconds(live_snapshot))
+                may_resume = (gateway.get("auto_resume_available") is True
+                              and output.get("selected_mode") == FULL
+                              and not automation.get("override")
+                              and not automation.get("circulation_stop_required", True)
+                              and not automation.get("hold_reason")
+                              and wait_reason is None)
+                if may_resume:
+                    self.command("resume-flow")
+                    gateway = self.command("status")
+                    if gateway.get("arm_mode") != "flow" or gateway.get("circulation") != "RUN":
+                        raise RuntimeError("Circulation did not resume in flow mode")
+                else:
+                    output["active_mode"] = SEMI
+                    output["actuation_enabled"] = False
+                    output["auto_resume_available"] = gateway.get("auto_resume_available") is True
+                    output["manual_wait_reason"] = wait_reason
+                    output["critical_manual_dose"] = critical_manual_dose(
+                        output, getattr(water, "value", None))
+                    critical_override = (output.get("selected_mode") == FULL
+                                         and automation.get("override") is True
+                                         and automation.get("circulation_stop_required") is True
+                                         and output["critical_manual_dose"] is True)
+                    output["confirmation_available"] = (output.get("selected_mode") == SEMI
+                        or critical_override) and any(
+                        item in CORRECTIVE_RECOMMENDATIONS
+                        for item in output.get("recommendations", [])) and not wait_reason
+                    output["hardware_status"] = "MANUAL DOSING ARMED — CIRCULATION STOPPED"
+                    output["outputs"] = {name: "OFF" for name in OUTPUTS}
+                    return output
             if automation.get("circulation_stop_required", True):
                 self.command("safe-off")
                 output["actuation_enabled"] = False

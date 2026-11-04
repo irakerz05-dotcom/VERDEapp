@@ -33,6 +33,15 @@ MAX_AUTO_SECONDS = 4.5
 PUMPS = ("pump1", "pump2", "pump3")
 ARM_RECORD = "GPIO24 HIGH=FLOW LOW=STOP; 18L\n"
 MANUAL_ARM_RECORD = "MANUAL DOSING ONLY; GPIO24 STOP; 18L\n"
+MANUAL_FROM_FLOW_RECORD = "MANUAL DOSING; PRIOR FLOW VERIFIED; GPIO24 STOP; 18L\n"
+BOOT_ID_PATH = Path("/proc/sys/kernel/random/boot_id")
+
+
+def manual_flow_record():
+    boot_id = BOOT_ID_PATH.read_text(encoding="ascii").strip()
+    if not re.fullmatch(r"[0-9a-f-]{36}", boot_id):
+        raise RuntimeError("Current boot identity is unavailable")
+    return MANUAL_FROM_FLOW_RECORD.rstrip("\n") + f"; BOOT={boot_id}\n"
 
 
 def protected_controller():
@@ -55,9 +64,30 @@ def arm_mode():
         if metadata.st_uid != 0 or metadata.st_mode & 0o077:
             return None
         record = ARM_PATH.read_text(encoding="utf-8")
-        return "flow" if record == ARM_RECORD else "manual" if record == MANUAL_ARM_RECORD else None
+        if record == ARM_RECORD:
+            return "flow"
+        if record == MANUAL_ARM_RECORD:
+            return "manual"
+        return "manual" if record == manual_flow_record() else None
     except FileNotFoundError:
         return None
+
+
+def auto_resume_available():
+    try:
+        metadata = ARM_PATH.stat()
+        return (metadata.st_uid == 0 and not metadata.st_mode & 0o077
+                and ARM_PATH.read_text(encoding="utf-8") == manual_flow_record())
+    except FileNotFoundError:
+        return False
+
+
+def flow_arm_current_boot():
+    try:
+        return (arm_mode() == "flow" and
+                ARM_PATH.stat().st_mtime >= time.time() - time.monotonic() - 5)
+    except FileNotFoundError:
+        return False
 
 
 def armed():
@@ -130,6 +160,7 @@ def status(controller, data, clock):
     return {
         "armed": armed(),
         "arm_mode": arm_mode(),
+        "auto_resume_available": auto_resume_available(),
         "circulation": circulation_state(controller),
         "dosing_pins": {name: controller.pin_state(pin)
                         for name, pin in controller.DOSING_PINS.items()},
@@ -138,6 +169,26 @@ def status(controller, data, clock):
         "in_progress": data["in_progress"],
         "limits_ml_in_24h": None,
     }
+
+
+def resume_flow(controller, data):
+    if not auto_resume_available():
+        raise RuntimeError("A prior supervised flow arm is required")
+    if data["in_progress"]:
+        raise RuntimeError("Interrupted dose needs manual inspection")
+    if circulation_state(controller) != "STOP":
+        raise RuntimeError("Circulation must be stopped before flow resumes")
+    controller.require_dosing_off()
+    try:
+        set_circulation(controller, "RUN")
+        ARM_PATH.write_text(ARM_RECORD, encoding="utf-8")
+        os.chmod(ARM_PATH, 0o600)
+    except BaseException:
+        set_circulation(controller, "STOP")
+        ARM_PATH.write_text(manual_flow_record(), encoding="utf-8")
+        os.chmod(ARM_PATH, 0o600)
+        raise
+    return status(controller, data, time.time())
 
 
 def dose(controller, data, clock, pump, seconds, *, manual=False):
@@ -182,6 +233,7 @@ def main():
     commands.add_parser("safe-off")
     commands.add_parser("arm")
     commands.add_parser("arm-manual")
+    commands.add_parser("resume-flow")
     commands.add_parser("disarm")
     circulation = commands.add_parser("circulation")
     circulation.add_argument("state", choices=("run", "stop"))
@@ -231,15 +283,20 @@ def main():
             elif args.command == "arm-manual":
                 if data["in_progress"]:
                     raise RuntimeError("Interrupted dose needs manual inspection")
+                prior_flow_verified = flow_arm_current_boot()
                 ARM_PATH.unlink(missing_ok=True)
                 with contextlib.redirect_stdout(sys.stderr):
                     controller.dosing_off()
                 set_circulation(controller, "STOP")
                 if input("Circulation is stopped. Watch the outlet, mix the reservoir manually, and check an independent meter after dosing. Type MANUAL to arm: ").strip() != "MANUAL":
                     raise RuntimeError("Manual dosing was not confirmed; controller stays disarmed")
-                ARM_PATH.write_text(MANUAL_ARM_RECORD, encoding="utf-8")
+                ARM_PATH.write_text(
+                    manual_flow_record() if prior_flow_verified else MANUAL_ARM_RECORD,
+                    encoding="utf-8")
                 os.chmod(ARM_PATH, 0o600)
                 result = status(controller, data, time.time())
+            elif args.command == "resume-flow":
+                result = resume_flow(controller, data)
             elif args.command == "circulation":
                 if arm_mode() != "flow":
                     raise RuntimeError("Circulation requires flow arming")

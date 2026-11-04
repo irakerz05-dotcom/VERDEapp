@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=67";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=67";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=68";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=68";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -365,14 +365,16 @@ function correctionGuidance(data) {
       ? `Circulation is stopped and automatic dosing is off. ${data.pumpAutomation.manualWaitReason}. Mix and verify with a separate meter before another dose.`
       : `Circulation is stopped and automatic dosing is off. ${data.pumpAutomation?.criticalManualDose ? "Each confirmed Critical correction runs for 4.5 seconds (estimated 3.69 mL)." : "The selected pump uses its saved dose volume."} Select one recommended pump, then mix and verify with a separate meter. If the next fresh reading still needs correction, confirm another dose.`
     : data.pumpAutomation?.circulationStopRequired
-      ? "Critical or faulty condition: circulation is stopped. To dose a recommended pump through the app, select Semi-Automation and have an operator arm manual dosing at the Pi."
+      ? "Critical or faulty condition: circulation is stopped. To dose a recommended pump through the app, have an operator arm manual dosing at the Pi."
     : /DISARMED/i.test(data.pumpAutomation?.hardwareStatus ?? "")
       ? "The pump gateway is disarmed. A supervised circulation flow check and rearm are required before app dosing."
       : canConfirm ? "Choose one recommended pump; the Pi checks live readings again before dosing."
         : data.mode === "Full Automation" ? "Full Automation uses fresh readings and the saved pulse limits."
           : "A pump dose is available only when fresh readings, circulation, and safety checks allow it.";
   const fullMode = data.pumpAutomation?.manualDosingArmed
-    ? "After recovery, disarm manual dosing and rearm circulation flow before returning to Full Automation."
+    ? data.requestedMode === "Full Automation" && data.pumpAutomation?.autoResumeAvailable
+      ? "After fresh readings recover and the post-dose mixing wait ends, circulation and Full Automation resume automatically."
+      : "After recovery, disarm manual dosing and verify circulation flow before returning to Full Automation."
     : data.requestedMode === "Full Automation"
       ? "Requested Full Automation resumes after recovery if the gateway remains flow-armed."
       : "After recovery, select Full Automation to resume automatic dosing.";
@@ -768,7 +770,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=67", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=68", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

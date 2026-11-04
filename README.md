@@ -709,9 +709,13 @@ dose. A Critical manual correction uses a fixed 4.5-second pulse, estimated at
 be measured separately. If a new post-dose reading still calls for correction,
 the farmer must confirm another dose. A pre-dose reading cannot authorize a
 repeat. The gateway retains the 4.5-second maximum pulse, one pump at a time,
-and a 60-second minimum gap. Manual arming never permits automatic dosing or
-starts circulation. After fresh readings clear the stop, disarm manual dosing,
-physically verify flow, and use the normal `arm` command before selecting Full.
+and a 60-second minimum gap. Manual arming never permits automatic dosing while
+the water remains Critical or faulty. With the later automatic flow-resume
+update, a manual session started from a supervised flow arm retains that proof.
+If Full was requested, fresh Optimal or Suboptimal readings and a post-dose
+mixing wait return the gateway to flow mode and the active mode to Full.
+A manual session started without prior flow confirmation remains Semi until
+an operator physically verifies flow with the normal `arm` command.
 The History page
 shows recorded Pump 1–3 doses from the last seven days above its sensor chart,
 regardless of the chart's Today/24 Hours/7 Days filter. Direct manual-controller
@@ -736,3 +740,12 @@ requests no dose. Critical or faulty readings switch the active mode to Semi
 and stop circulation. Once fresh readings clear, the active mode returns to
 the requested Full mode automatically; a farmer-selected Semi mode stays Semi.
 The gateway still enforces one bounded pulse at a time and its mixing wait.
+
+`deploy/apply_pi_auto_flow_resume.py` installs the guarded runtime change after
+the updated root-owned gateway is installed. The gateway marks manual sessions
+that started from a supervised flow arm; only those sessions can resume flow
+automatically. A Critical or faulty reading still stops circulation and keeps
+the active mode Semi. The first fresh normal evaluation after the 60-second
+post-dose wait and a newer sensor sample can resume flow if Full remains the
+farmer's requested mode. Manually selected Semi remains Semi. A service restart
+starts with Semi selected, so the farmer must request Full again after restart.

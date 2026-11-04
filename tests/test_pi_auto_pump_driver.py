@@ -4,7 +4,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from deploy import pi_auto_pump_driver as driver
 
@@ -29,8 +30,57 @@ class FakeController:
         return ("24: op dh pd | hi // GPIO24 = output" if self.circulation == "RUN"
                 else "24: op dl pd | lo // GPIO24 = output")
 
+    def set_level(self, pin, level):
+        assert pin == 24
+        self.circulation = "RUN" if level == "dh" else "STOP"
+
 
 class GatewayTests(unittest.TestCase):
+    def test_auto_resume_requires_a_protected_prior_flow_record(self):
+        record = Mock()
+        record.stat.return_value = SimpleNamespace(st_uid=0, st_mode=0o600)
+        with patch.object(driver, "ARM_PATH", record):
+            record.read_text.return_value = driver.manual_flow_record()
+            self.assertEqual(driver.arm_mode(), "manual")
+            self.assertTrue(driver.auto_resume_available())
+            record.read_text.return_value = driver.MANUAL_ARM_RECORD
+            self.assertFalse(driver.auto_resume_available())
+            record.read_text.return_value = driver.manual_flow_record()
+            record.stat.return_value = SimpleNamespace(st_uid=1000, st_mode=0o600)
+            self.assertFalse(driver.auto_resume_available())
+
+    def test_flow_resume_requires_prior_proof_and_no_interrupted_dose(self):
+        controller = FakeController()
+        controller.circulation = "STOP"
+        record = Mock()
+        with (patch.object(driver, "auto_resume_available", return_value=False),
+              patch.object(driver, "ARM_PATH", record)):
+            with self.assertRaisesRegex(RuntimeError, "prior supervised flow"):
+                driver.resume_flow(controller, {"in_progress": False})
+        self.assertEqual(controller.circulation, "STOP")
+        with (patch.object(driver, "auto_resume_available", return_value=True),
+              patch.object(driver, "ARM_PATH", record),
+              patch.object(driver.os, "chmod"),
+              patch.object(driver, "status", return_value={"circulation": "RUN"})):
+            with self.assertRaisesRegex(RuntimeError, "Interrupted dose"):
+                driver.resume_flow(controller, {"in_progress": True})
+            self.assertEqual(controller.circulation, "STOP")
+            result = driver.resume_flow(controller, {"in_progress": False})
+            self.assertEqual(result["circulation"], "RUN")
+            self.assertEqual(controller.circulation, "RUN")
+            record.write_text.assert_called_once_with(driver.ARM_RECORD, encoding="utf-8")
+
+    def test_prior_flow_proof_must_be_from_current_boot(self):
+        record = Mock()
+        with (patch.object(driver, "ARM_PATH", record),
+              patch.object(driver, "arm_mode", return_value="flow"),
+              patch.object(driver.time, "time", return_value=1000),
+              patch.object(driver.time, "monotonic", return_value=200)):
+            record.stat.return_value = SimpleNamespace(st_mtime=900)
+            self.assertTrue(driver.flow_arm_current_boot())
+            record.stat.return_value = SimpleNamespace(st_mtime=700)
+            self.assertFalse(driver.flow_arm_current_boot())
+
     def test_corrected_reservoir_caps_the_pulse_and_requires_new_arm_record(self):
         self.assertEqual(driver.ARM_RECORD, "GPIO24 HIGH=FLOW LOW=STOP; 18L\n")
         self.assertEqual(driver.PUMPS, ("pump1", "pump2", "pump3"))

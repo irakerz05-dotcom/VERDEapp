@@ -406,6 +406,7 @@ test("manual dosing arm is exposed separately from a Critical circulation stop",
   const state = { ...backendState, automation: {
     ...backendState.automation,
     hardware_status: "MANUAL DOSING ARMED — CIRCULATION STOPPED",
+    auto_resume_available: true,
     critical_manual_dose: true,
     manual_wait_reason: "Wait for a new sensor reading after the previous dose",
     circulation_stop_required: true,
@@ -414,6 +415,7 @@ test("manual dosing arm is exposed separately from a Critical circulation stop",
   } };
   const snapshot = normalizeBackendSnapshot(state, { sensors: state.sensors });
   assert.equal(snapshot.pumpAutomation.manualDosingArmed, true);
+  assert.equal(snapshot.pumpAutomation.autoResumeAvailable, true);
   assert.equal(snapshot.pumpAutomation.criticalManualDose, true);
   assert.match(snapshot.pumpAutomation.manualWaitReason, /new sensor reading/);
   assert.equal(snapshot.pumpAutomation.circulationStopRequired, true);

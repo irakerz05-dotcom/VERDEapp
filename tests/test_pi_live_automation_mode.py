@@ -58,6 +58,19 @@ class LiveModeTests(unittest.TestCase):
         self.assertTrue(decide(pest=SimpleNamespace(status="FAULT / ERROR", value=None))["circulation_stop_required"])
         self.assertTrue(decide(water=SimpleNamespace(value="Critical", status="EXPERIMENTAL"))["override"])
 
+    def test_requested_full_returns_after_critical_clears(self):
+        critical = snapshot()
+        critical["sensors"]["ph"].update(value=4.0, classification="CRITICAL")
+        stopped = decide(snapshot=critical,
+                         water=SimpleNamespace(status="EXPERIMENTAL", value="Critical"))
+        self.assertEqual(stopped["selected_mode"], FULL)
+        self.assertEqual(stopped["active_mode"], SEMI)
+        self.assertTrue(stopped["circulation_stop_required"])
+        recovered = decide()
+        self.assertEqual(recovered["active_mode"], FULL)
+        self.assertFalse(recovered["circulation_stop_required"])
+        self.assertEqual(decide(selected_mode=SEMI)["active_mode"], SEMI)
+
     def test_recovering_temperature_holds_without_fault_override(self):
         live = snapshot()
         live["sensors"]["water_temperature"] = {

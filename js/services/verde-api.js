@@ -457,6 +457,7 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
       confirmationAvailable: state.automation.confirmation_available === true,
       circulationStopRequired: state.automation.circulation_stop_required === true,
       manualDosingArmed: /MANUAL DOSING ARMED/i.test(state.automation.hardware_status ?? ""),
+      autoResumeAvailable: state.automation.auto_resume_available === true,
       criticalManualDose: state.automation.critical_manual_dose === true,
       manualWaitReason: state.automation.manual_wait_reason || null,
       hardwareStatus: state.automation.hardware_status || "Unavailable",

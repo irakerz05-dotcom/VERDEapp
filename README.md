@@ -719,8 +719,8 @@ an operator physically verifies flow with the normal `arm` command.
 When pH and EC are both Suboptimal in Full mode, the first eligible pulse
 corrects pH. If EC is still below 1.2 mS/cm after that pulse, Pump 1 gets the
 next eligible turn after the 60-second gateway wait and a newer sensor sample.
-Only one pump runs at a time. The app remains in Semi if the operator selected
-Semi to inspect an unexpected pH response.
+Only one pump runs at a time. A fresh Critical reading temporarily makes Semi
+active; fresh valid Optimal or Suboptimal water readings select Full again.
 For Critical water readings, a supervised flow arm remains valid when the
 controller stops circulation. The Dashboard offers only the specific pH/EC
 correction supported by a fresh matching sensor. A farmer must select and
@@ -750,8 +750,8 @@ while retaining Critical sensor and Faulty Vision overrides. With Full mode
 requested and the gateway flow-armed, a fresh Suboptimal low EC reading can
 request Pump 1, low pH Pump 2, or high pH Pump 3. A fresh Optimal water reading
 requests no dose. Critical or faulty readings switch the active mode to Semi
-and stop circulation. Once fresh readings clear, the active mode returns to
-the requested Full mode automatically; a farmer-selected Semi mode stays Semi.
+and stop circulation. Once fresh readings clear, the service selects Full
+automatically, including after a manual Semi correction.
 The gateway still enforces one bounded pulse at a time and its mixing wait.
 
 `deploy/apply_pi_auto_flow_resume.py` installs the guarded runtime change after
@@ -759,6 +759,12 @@ the updated root-owned gateway is installed. The gateway marks manual sessions
 that started from a supervised flow arm; only those sessions can resume flow
 automatically. A Critical or faulty reading still stops circulation and keeps
 the active mode Semi. The first fresh normal evaluation after the 60-second
-post-dose wait and a newer sensor sample can resume flow if Full remains the
-farmer's requested mode. Manually selected Semi remains Semi. A service restart
-starts with Semi selected, so the farmer must request Full again after restart.
+post-dose wait and a newer sensor sample can resume flow when Full is selected.
+`deploy/apply_pi_auto_mode_recovery.py` installs the service rule that selects
+Full when a fresh water sample is Optimal or Suboptimal with no sensor, vision,
+or database hold. Run `--check`, then `--apply`, compile
+`~/VERDE-Sensor-Integration/app/service.py`, and restart `verde.service`.
+The installer does not disarm or switch GPIO. A normal service restart briefly
+stops outputs, then the already armed gateway can restore circulation. A
+manual-only arm without prior verified flow still requires the normal flow arm;
+the dashboard does not claim physical Full operation while circulation is STOP.

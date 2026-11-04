@@ -721,6 +721,14 @@ corrects pH. If EC is still below 1.2 mS/cm after that pulse, Pump 1 gets the
 next eligible turn after the 60-second gateway wait and a newer sensor sample.
 Only one pump runs at a time. The app remains in Semi if the operator selected
 Semi to inspect an unexpected pH response.
+For Critical water readings, a supervised flow arm remains valid when the
+controller stops circulation. The Dashboard offers only the specific pH/EC
+correction supported by a fresh matching sensor. A farmer must select and
+confirm one pump; the protected gateway requires circulation STOP, limits the
+pulse to 4.5 seconds, and keeps the 60-second repeat wait. A pure vision fault
+does not offer a correction pump. Check a separate meter before and after any
+Critical correction. `deploy/apply_pi_critical_flow_manual.py` installs this
+guarded runtime update after the protected gateway is updated.
 The History page
 shows recorded Pump 1–3 doses from the last seven days above its sensor chart,
 regardless of the chart's Today/24 Hours/7 Days filter. Direct manual-controller

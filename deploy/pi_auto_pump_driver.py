@@ -194,7 +194,8 @@ def resume_flow(controller, data):
 
 
 def dose(controller, data, clock, pump, seconds, *, manual=False):
-    if arm_mode() != ("manual" if manual else "flow"):
+    permitted_modes = ("manual", "flow") if manual else ("flow",)
+    if arm_mode() not in permitted_modes:
         raise RuntimeError("Pump controller is not armed for this dosing mode")
     if data["in_progress"]:
         raise RuntimeError("An interrupted dose needs manual inspection")

@@ -118,13 +118,15 @@ class PumpRuntime:
             sensors = live_snapshot.get("sensors", {}) if isinstance(live_snapshot, dict) else {}
             manual_stop = automation.get("circulation_stop_required") is True
             if manual_stop or gateway.get("arm_mode") == "manual":
-                if gateway.get("arm_mode") != "manual" or gateway.get("circulation") != "STOP":
-                    return Result("BLOCKED — MANUAL DOSING ARM REQUIRED")
+                if gateway.get("arm_mode") not in ("manual", "flow") or gateway.get("circulation") != "STOP":
+                    return Result("BLOCKED — STOPPED CIRCULATION REQUIRED")
                 wait_reason = manual_wait_reason(gateway, snapshot_age_seconds(live_snapshot))
                 if wait_reason:
                     return Result("BLOCKED — WAIT FOR NEXT CHECK", detail=wait_reason)
                 critical = critical_manual_dose(
                     automation, state.get("water_quality_experimental", {}).get("value"))
+                if manual_stop and not critical:
+                    return Result("BLOCKED — CRITICAL MANUAL CORRECTION ONLY")
                 durations = ({pump: CRITICAL_MANUAL_SECONDS for pump in ("pump1", "pump2", "pump3")}
                              if critical else dose_durations(load_dose_settings()))
                 proposal = manual_correction(
@@ -230,10 +232,20 @@ class PumpRuntime:
                     output["outputs"] = {name: "OFF" for name in OUTPUTS}
                     return output
             if automation.get("circulation_stop_required", True):
-                self.command("safe-off")
+                stopped = self.command("safe-off")
+                if stopped.get("circulation") != "STOP":
+                    raise RuntimeError("Circulation did not stop for manual correction")
                 output["actuation_enabled"] = False
-                output["confirmation_available"] = False
-                output["hardware_status"] = "SAFETY OVERRIDE — PUMPS STOPPED"
+                critical = critical_manual_dose(output, getattr(water, "value", None))
+                wait_reason = manual_wait_reason(gateway, snapshot_age_seconds(live_snapshot))
+                output["critical_manual_dose"] = critical
+                output["manual_wait_reason"] = wait_reason
+                output["confirmation_available"] = (critical and not output.get("hold_reason")
+                    and not wait_reason and gateway.get("arm_mode") == "flow"
+                    and any(item in CORRECTIVE_RECOMMENDATIONS
+                            for item in output.get("recommendations", [])))
+                output["hardware_status"] = ("CRITICAL — FARMER CONFIRMATION AVAILABLE"
+                    if output["confirmation_available"] else "SAFETY OVERRIDE — PUMPS STOPPED")
                 output["outputs"] = {name: "OFF" for name in OUTPUTS}
                 return output
             if automation.get("override"):

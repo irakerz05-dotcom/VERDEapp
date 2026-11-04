@@ -137,12 +137,29 @@ class RuntimeTests(unittest.TestCase):
         runtime = load_runtime().PumpRuntime()
         calls = []
         gateway = {"armed": True, "circulation": "RUN", "in_progress": False}
-        runtime.command = lambda *args: calls.append(args) or gateway
+        runtime.command = lambda *args: calls.append(args) or (
+            {"armed": True, "circulation": "STOP", "dosing": "OFF"}
+            if args == ("safe-off",) else gateway)
         automation, snapshot, water, plant, camera = inputs()
         automation["override"] = True
         automation["circulation_stop_required"] = True
         runtime.apply(automation, snapshot, water, plant, camera)
         self.assertEqual(calls, [("status",), ("safe-off",)])
+
+    def test_manual_confirmation_stays_blocked_if_circulation_stop_is_unverified(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        runtime.command = lambda *args: calls.append(args) or {
+            "armed": True, "arm_mode": "flow", "circulation": "RUN",
+            "in_progress": False}
+        automation, snapshot, water, plant, camera = inputs()
+        automation.update(active_mode=pi_pump_decision.SEMI, override=True,
+                          override_reason="ph Critical", circulation_stop_required=True,
+                          recommendations=["pH-Up dosing"])
+        water.value = "Critical"
+        result = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertFalse(result["confirmation_available"])
+        self.assertIn("Pump controller fault", result["override_reason"])
 
     def test_farmer_can_select_the_specific_recommended_pump(self):
         module = load_runtime()
@@ -240,6 +257,53 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result.status, "DOSED")
         self.assertAlmostEqual(result.value["estimated_ml"], 3.69)
         self.assertEqual(calls, [("status",), ("manual-dose", "pump3", "4.50000000")])
+
+    def test_flow_armed_critical_exposes_specific_manual_confirmation(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        gateway = {"armed": True, "arm_mode": "flow", "circulation": "STOP",
+                   "in_progress": False, "last_dose_elapsed_seconds": 90}
+
+        def command(*args):
+            calls.append(args)
+            if args == ("safe-off",):
+                return {"armed": True, "circulation": "STOP", "dosing": "OFF"}
+            return gateway
+
+        runtime.command = command
+        automation, snapshot, water, plant, camera = inputs()
+        snapshot["sensors"]["ph"].update(value=4.0, classification="CRITICAL")
+        automation.update(active_mode=pi_pump_decision.SEMI, override=True,
+                          override_reason="ph Critical", circulation_stop_required=True,
+                          recommendations=["pH-Up dosing"])
+        water.value = "Critical"
+        displayed = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertTrue(displayed["confirmation_available"])
+        self.assertTrue(displayed["critical_manual_dose"])
+        self.assertEqual(displayed["active_mode"], pi_pump_decision.SEMI)
+        self.assertEqual(displayed["outputs"]["circulation_pump"], "OFF")
+        calls.clear()
+        state = {"automation": displayed, "database": {"status": "AVAILABLE"},
+                 "water_quality_experimental": {"value": "Critical"}}
+        result = runtime.confirm(state, snapshot, "pump2")
+        self.assertEqual(result.status, "DOSED")
+        self.assertEqual(calls, [("status",), ("manual-dose", "pump2", "4.50000000")])
+
+    def test_flow_armed_vision_fault_does_not_offer_manual_dose(self):
+        runtime = load_runtime().PumpRuntime()
+        calls = []
+        runtime.command = lambda *args: calls.append(args) or (
+            {"armed": True, "circulation": "STOP", "dosing": "OFF"}
+            if args == ("safe-off",) else
+            {"armed": True, "arm_mode": "flow", "circulation": "STOP",
+             "in_progress": False, "last_dose_elapsed_seconds": None})
+        automation, snapshot, water, plant, camera = inputs()
+        automation.update(active_mode=pi_pump_decision.SEMI, override=True,
+                          override_reason="Faulty Vision", circulation_stop_required=True,
+                          recommendations=["pH-Up dosing"])
+        result = runtime.apply(automation, snapshot, water, plant, camera)
+        self.assertFalse(result["confirmation_available"])
+        self.assertEqual(calls, [("status",), ("safe-off",)])
 
     def test_full_request_remains_selected_during_critical_manual_correction(self):
         runtime = load_runtime().PumpRuntime()

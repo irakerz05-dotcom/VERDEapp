@@ -148,6 +148,23 @@ class GatewayTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "must be STOP"):
                     driver.dose(controller, state, 1100.0, "pump3", 4.5, manual=True)
 
+    def test_flow_arm_allows_only_confirmed_manual_pulse_while_circulation_stopped(self):
+        controller = FakeController()
+        state = {"version": 1, "events": [], "in_progress": False}
+        with tempfile.TemporaryDirectory() as directory:
+            with (patch.object(driver, "STATE_PATH", Path(directory) / "state.json"),
+                  patch.object(driver, "arm_mode", return_value="flow"),
+                  patch.object(driver.time, "time", return_value=1070.0)):
+                with self.assertRaisesRegex(RuntimeError, "must be STOP"):
+                    driver.dose(controller, state, 1000.0, "pump2", 4.5, manual=True)
+                controller.circulation = "STOP"
+                result = driver.dose(controller, state, 1000.0, "pump2", 4.5,
+                                     manual=True)
+                self.assertAlmostEqual(result["estimated_ml"], 3.69)
+                self.assertEqual(controller.dose_calls, [("pump2", 4.5)])
+                with self.assertRaisesRegex(RuntimeError, "must be RUN"):
+                    driver.dose(controller, state, 1200.0, "pump2", 4.5)
+
 
 if __name__ == "__main__":
     unittest.main()

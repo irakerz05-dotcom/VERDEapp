@@ -64,17 +64,17 @@ test("service-worker assets match versioned index and module references", async 
     readFile(`${root}js/app.js`, "utf8")
   ]);
 
-  assert.match(index, /href="styles\.css\?v=68"/);
-  assert.match(index, /src="js\/app\.js\?v=68"/);
-  assert.match(app, /services\/verde-api\.js\?v=68/);
-  assert.match(app, /verde-ui\.js\?v=68/);
+  assert.match(index, /href="styles\.css\?v=69"/);
+  assert.match(index, /src="js\/app\.js\?v=69"/);
+  assert.match(app, /services\/verde-api\.js\?v=69/);
+  assert.match(app, /verde-ui\.js\?v=69/);
   assert.match(app, /sensor-detail/);
   assert.match(app, /Problem timeline/);
   assert.match(app, /Alerts & activity/);
-  assert.match(worker, /"\.\/styles\.css\?v=68"/);
-  assert.match(worker, /"\.\/js\/app\.js\?v=68"/);
-  assert.match(worker, /"\.\/js\/verde-ui\.js\?v=68"/);
-  assert.match(worker, /"\.\/js\/services\/verde-api\.js\?v=68"/);
+  assert.match(worker, /"\.\/styles\.css\?v=69"/);
+  assert.match(worker, /"\.\/js\/app\.js\?v=69"/);
+  assert.match(worker, /"\.\/js\/verde-ui\.js\?v=69"/);
+  assert.match(worker, /"\.\/js\/services\/verde-api\.js\?v=69"/);
   const dashboard = app.split("function renderDashboard(data) {")[1]?.split("function plantAge(slot) {")[0];
   const plants = app.split("function renderPlants(data, slots = null) {")[1];
   assert.ok(dashboard);
@@ -84,6 +84,7 @@ test("service-worker assets match versioned index and module references", async 
   assert.match(app, /Manual correction requested:/);
   assert.match(app, /Manual correction required for Critical readings/);
   assert.match(app, /Critical or faulty condition: circulation is stopped/);
+  assert.match(app, /farmer-confirmed Critical correction after checking a separate meter/);
   assert.match(app, /Manually dose/);
   assert.match(app, /View pump dosing history/);
   assert.match(app, /\.page-title"\)\?\.after\(app\.querySelector\("\.pump-history"\)\)/);

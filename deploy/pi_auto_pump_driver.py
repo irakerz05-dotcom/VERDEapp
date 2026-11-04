@@ -69,7 +69,7 @@ def arm_mode():
         if record == MANUAL_ARM_RECORD:
             return "manual"
         return "manual" if record == manual_flow_record() else None
-    except FileNotFoundError:
+    except (FileNotFoundError, PermissionError):
         return None
 
 
@@ -78,7 +78,7 @@ def auto_resume_available():
         metadata = ARM_PATH.stat()
         return (metadata.st_uid == 0 and not metadata.st_mode & 0o077
                 and ARM_PATH.read_text(encoding="utf-8") == manual_flow_record())
-    except FileNotFoundError:
+    except (FileNotFoundError, PermissionError):
         return False
 
 
@@ -86,7 +86,7 @@ def flow_arm_current_boot():
     try:
         return (arm_mode() == "flow" and
                 ARM_PATH.stat().st_mtime >= time.time() - time.monotonic() - 5)
-    except FileNotFoundError:
+    except (FileNotFoundError, PermissionError):
         return False
 
 

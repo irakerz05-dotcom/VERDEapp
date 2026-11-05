@@ -672,27 +672,30 @@ test("real adapter keeps status and camera data when optional sensor routes are 
   assert.deepEqual(calls, ["/api/status", "/api/sensors/latest", "/api/sensors/health"]);
 });
 
-test("integrated V8 pest result preserves backend text, confidence and annotated version", () => {
+test("integrated V8 pest result preserves backend text and confidence with an unannotated photo", () => {
   const now = Date.parse("2026-11-05T09:00:30Z");
-  const camera = { ai_capture_version: "2026-11-05T09:00:00Z", ai_image_available: true, ai_status: "READY" };
+  const camera = { ai_capture_version: "2026-11-05T09:00:00Z", ai_image_available: true, ai_status: "READY",
+    image_available: true, status: "CONNECTED", capture_version: 42 };
   const pest = { status: "READY", value: "Pest Detected", confidence: 0.689,
     detail: "5 possible printed insect prop(s) detected; farmer inspection recommended." };
   const result = normalizeIntegratedPest(pest, camera, now);
   assert.deepEqual(result, { detected: true, status: "Pest Detected", detail: pest.detail,
-    confidence: "69% confidence", frameUrl: "/api/camera/annotated?v=2026-11-05T09%3A00%3A00Z" });
+    confidence: "69% confidence", frameUrl: "/api/camera/frame?v=42" });
   assert.equal(normalizeIntegratedPest({ status: "READY", value: "No Pest Detected",
     detail: "No qualifying printed props.", confidence: null }, camera, now).detected, false);
 });
 
-test("dedicated pest image shares the unchanged main camera URL", () => {
+test("dedicated pest photo uses the raw frame while main camera stays annotated", () => {
   const version = new Date().toISOString();
   const state = { ...backendState, camera: { ...backendState.camera,
-    ai_capture_version: version, ai_image_available: true, ai_status: "READY" },
+    ai_capture_version: version, ai_image_available: true, ai_status: "READY",
+    image_available: true, status: "CONNECTED", capture_version: 42 },
     pest_detection: { status: "READY", value: "Pest Detected", detail: "5 possible printed props.", confidence: .7 } };
   const snapshot = normalizeBackendSnapshot(state, { sensors: state.sensors });
   assert.equal(snapshot.plant.pestSection.status, state.pest_detection.value);
   assert.equal(snapshot.plant.pestSection.detail, state.pest_detection.detail);
-  assert.equal(snapshot.plant.pestSection.frameUrl, snapshot.plant.frameUrl);
+  assert.equal(snapshot.plant.pestSection.frameUrl, "/api/camera/frame?v=42");
+  assert.equal(snapshot.plant.frameUrl, `/api/camera/annotated?v=${encodeURIComponent(version)}`);
   assert.equal(snapshot.plant.aiAnnotated, true);
 });
 

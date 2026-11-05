@@ -422,8 +422,8 @@ export function normalizeIntegratedPest(pest, camera, now = Date.now()) {
     status: pest.value,
     detail: pest.detail,
     confidence: Number.isFinite(pest.confidence) ? `${Math.round(pest.confidence * 100)}% confidence` : null,
-    frameUrl: camera?.ai_image_available === true && camera?.ai_status === "READY"
-      ? `/api/camera/annotated?v=${encodeURIComponent(camera.ai_capture_version ?? version)}` : null
+    frameUrl: camera?.image_available === true && !HARDWARE_FAULT_STATUS.test(String(camera?.status ?? ""))
+      ? `/api/camera/frame?v=${encodeURIComponent(camera.capture_version ?? "latest")}` : null
   };
 }
 

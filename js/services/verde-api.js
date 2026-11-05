@@ -419,7 +419,7 @@ export function normalizeIntegratedPest(pest, camera, now = Date.now(), overlay 
   }
   const size = overlay?.image_size;
   const validOverlay = overlay?.generated_at === camera.ai_capture_version
-    && /^capture-[0-4]\.jpg$/.test(overlay.capture_id ?? "")
+    && /^capture-(?:[0-9]|1[01])\.jpg$/.test(overlay.capture_id ?? "")
     && Array.isArray(size) && size.length === 2 && size.every((value) => Number.isInteger(value) && value > 0)
     && Array.isArray(overlay.boxes) && overlay.boxes.every((item) =>
       Array.isArray(item.box_xyxy) && item.box_xyxy.length === 4

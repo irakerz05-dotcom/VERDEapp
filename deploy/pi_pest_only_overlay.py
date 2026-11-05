@@ -5,7 +5,7 @@ import math
 import re
 
 
-CAPTURE_ID = re.compile(r"capture-[0-4]\.jpg\Z")
+CAPTURE_ID = re.compile(r"capture-(?:[0-9]|1[01])\.jpg\Z")
 
 
 def pest_overlay(vision_store, camera_capture):

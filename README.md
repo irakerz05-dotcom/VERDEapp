@@ -768,3 +768,16 @@ The installer does not disarm or switch GPIO. A normal service restart briefly
 stops outputs, then the already armed gateway can restore circulation. A
 manual-only arm without prior verified flow still requires the normal flow arm;
 the dashboard does not claim physical Full operation while circulation is STOP.
+
+# Vision Harvest-Ready SMS on the Pi
+
+For the six fixed NFT zones, `deploy/apply_pi_vision_harvest_sms.py` adds a
+camera-only Harvest-Ready notice. It maps worker zones T1–T3 to P1–P3 and
+B1–B3 to P4–P6. A notice requires a fresh, matching camera report and the
+worker's `harvest_ready: true` flag for that zone. The separate planting-age
+harvest card does not send SMS. Existing SMS enablement, recipient, modem
+spacing, and incident transition rules still apply.
+
+Run `python3 deploy/apply_pi_vision_harvest_sms.py --check` before
+`python3 deploy/apply_pi_vision_harvest_sms.py --apply` on the Pi. The installer
+backs up each changed backend file and does not restart the service or send SMS.

@@ -13,21 +13,21 @@ import {
 } from "../js/services/verde-api.js";
 
 test("per-plant fusion keeps fixed slots and invalidates old results when disconnected", () => {
-  const rows = Array.from({ length: 8 }, (_, index) => ({
+  const rows = Array.from({ length: 6 }, (_, index) => ({
     slot: index + 1,
     sensor_status: "Optimal",
-    plant_condition: index === 0 ? "Healthy" : index === 7 ? "Yellowing" : null,
-    confidence: index === 0 ? "High" : index === 7 ? "Medium" : null,
-    status: index === 0 || index === 7 ? "READY" : "NO DETECTION",
+    plant_condition: index === 0 ? "Healthy" : index === 5 ? "Yellowing" : null,
+    confidence: index === 0 ? "High" : index === 5 ? "Medium" : null,
+    status: index === 0 || index === 5 ? "READY" : "NO DETECTION",
     reason: "Descriptive confidence only."
   }));
   const normalized = normalizeFusionBySlot([...rows].reverse());
   assert.equal(normalized[0].slot, 1);
   assert.equal(normalized[0].confidence, "High");
-  assert.equal(normalized[7].slot, 8);
-  assert.equal(normalized[7].confidence, "Medium");
-  assert.equal(normalized.length, 8);
-  assert.equal(normalizeFusionBySlot([...rows.slice(0, 7), rows[0]]), null);
+  assert.equal(normalized[5].slot, 6);
+  assert.equal(normalized[5].confidence, "Medium");
+  assert.equal(normalized.length, 6);
+  assert.equal(normalizeFusionBySlot([...rows.slice(0, 5), rows[0]]), null);
   assert.equal(normalizeFusionBySlot(Array.from({ length: 10 }, (_, index) => ({ slot: index + 1 }))), null);
   const stale = markSnapshotStale({ online: true, sensors: [], fusionBySlot: normalized }, "Offline");
   assert.equal(stale.fusionBySlot[0].confidence, null);
@@ -704,17 +704,17 @@ test("mock SMS settings are separate from the live modem", async () => {
   assert.equal((await api.getSmsSettings()).modem_configured, false);
 });
 
-test("plant slots normalize eight fixed positions and reject older slot APIs", () => {
-  const records = Array.from({ length: 8 }, (_, index) => ({
+test("plant slots normalize six fixed positions and reject older slot APIs", () => {
+  const records = Array.from({ length: 6 }, (_, index) => ({
     slot: index + 1, planted_on: index === 0 ? "2026-10-01" : null,
     days_growing: index === 0 ? 25 : null
   }));
-  const slots = normalizePlantSlots({ as_of: "2026-10-26", slot_count: 8, slots: records });
+  const slots = normalizePlantSlots({ as_of: "2026-10-26", slot_count: 6, slots: records });
   assert.equal(slots.supported, true);
-  assert.equal(slots.slots.length, 8);
+  assert.equal(slots.slots.length, 6);
   assert.deepEqual(slots.slots[0], { slot: 1, plantedOn: "2026-10-01", daysGrowing: 25 });
-  assert.deepEqual(slots.slots[7], { slot: 8, plantedOn: null, daysGrowing: null });
-  assert.equal(normalizePlantSlots({ slot_count: 6, slots: records.slice(0, 6) }).supported, false);
+  assert.deepEqual(slots.slots[5], { slot: 6, plantedOn: null, daysGrowing: null });
+  assert.equal(normalizePlantSlots({ slot_count: 8, slots: [...records, { slot: 7 }, { slot: 8 }] }).supported, false);
   assert.equal(normalizePlantSlots({ slot_count: 10, slots: Array.from({ length: 10 }, (_, index) => ({ slot: index + 1 })) }).supported, false);
 });
 
@@ -723,13 +723,13 @@ test("plant slot updates use the authenticated backend", async () => {
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url, options });
     const payload = url === "/api/session" ? { token: "session-token" }
-      : { as_of: "2026-10-26", slot_count: 8,
-        slots: Array.from({ length: 8 }, (_, index) => ({ slot: index + 1,
+      : { as_of: "2026-10-26", slot_count: 6,
+        slots: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1,
           planted_on: index === 0 ? "2026-10-01" : null, days_growing: index === 0 ? 25 : null })) };
     return { ok: true, status: 200, json: async () => payload };
   };
   const api = new VerdeApi({ fetchImpl });
-  assert.equal((await api.getPlantSlots()).slots.length, 8);
+  assert.equal((await api.getPlantSlots()).slots.length, 6);
   await api.updatePlantSlots({ operation: "set", slot: 1, planted_on: "2026-10-01" });
   assert.deepEqual(calls.map(({ url }) => url), ["/api/plant-slots", "/api/session", "/api/plant-slots"]);
   assert.equal(calls[2].options.headers["X-VERDE-Token"], "session-token");
@@ -739,11 +739,11 @@ test("plant slot updates use the authenticated backend", async () => {
 test("mock plant slot dates can be swapped and erased", async () => {
   const api = new MockVerdeApi({ delay: 0 });
   await api.updatePlantSlots({ operation: "set", slot: 1, planted_on: "2026-01-01" });
-  await api.updatePlantSlots({ operation: "swap", first: 1, second: 8 });
+  await api.updatePlantSlots({ operation: "swap", first: 1, second: 6 });
   let slots = await api.getPlantSlots();
   assert.equal(slots.slots[0].plantedOn, null);
-  assert.equal(slots.slots[7].plantedOn, "2026-01-01");
-  await api.updatePlantSlots({ operation: "clear", slot: 8 });
+  assert.equal(slots.slots[5].plantedOn, "2026-01-01");
+  await api.updatePlantSlots({ operation: "clear", slot: 6 });
   slots = await api.getPlantSlots();
-  assert.equal(slots.slots[7].plantedOn, null);
+  assert.equal(slots.slots[5].plantedOn, null);
 });

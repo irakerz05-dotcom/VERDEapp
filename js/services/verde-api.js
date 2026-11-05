@@ -333,14 +333,14 @@ export function markSnapshotStale(snapshot, reason) {
 
 export function normalizePlantSlots(payload) {
   const entries = new Map((Array.isArray(payload?.slots) ? payload.slots : [])
-    .filter((item) => Number.isInteger(item?.slot) && item.slot >= 1 && item.slot <= 8)
+    .filter((item) => Number.isInteger(item?.slot) && item.slot >= 1 && item.slot <= 6)
     .map((item) => [item.slot, item]));
   return {
-    supported: payload?.supported !== false && payload?.slot_count === 8
-      && Array.isArray(payload?.slots) && payload.slots.length === 8,
+    supported: payload?.supported !== false && payload?.slot_count === 6
+      && Array.isArray(payload?.slots) && payload.slots.length === 6,
     asOf: typeof payload?.as_of === "string" ? payload.as_of : null,
     error: payload?.error ?? null,
-    slots: Array.from({ length: 8 }, (_, index) => {
+    slots: Array.from({ length: 6 }, (_, index) => {
       const source = entries.get(index + 1) ?? {};
       return {
         slot: index + 1,
@@ -353,12 +353,12 @@ export function normalizePlantSlots(payload) {
 }
 
 export function normalizeFusionBySlot(rows) {
-  if (!Array.isArray(rows) || rows.length !== 8) return null;
+  if (!Array.isArray(rows) || rows.length !== 6) return null;
   const allowedConfidence = new Set(["High", "Medium", "Low", null]);
   const allowedConditions = new Set(["Healthy", "Yellowing", "Wilting", "Harvest-Ready", "Faulty Vision", null]);
   const bySlot = new Map();
   for (const row of rows) {
-    if (!Number.isInteger(row?.slot) || row.slot < 1 || row.slot > 8
+    if (!Number.isInteger(row?.slot) || row.slot < 1 || row.slot > 6
         || bySlot.has(row.slot) || !allowedConfidence.has(row.confidence ?? null)
         || !allowedConditions.has(row.plant_condition ?? null)) return null;
     bySlot.set(row.slot, {
@@ -370,8 +370,8 @@ export function normalizeFusionBySlot(rows) {
       reason: row.reason ?? "No fusion result."
     });
   }
-  return bySlot.size === 8
-    ? Array.from({ length: 8 }, (_, index) => bySlot.get(index + 1)) : null;
+  return bySlot.size === 6
+    ? Array.from({ length: 6 }, (_, index) => bySlot.get(index + 1)) : null;
 }
 
 function hasSensorOutput(sensor) {
@@ -871,7 +871,7 @@ export class MockVerdeApi {
     this.pumpVolumes = { pump1: 3.69, pump2: 3.69, pump3: 3.69 };
     this.smsSettings = { sms_enabled: false, recipient_configured: false,
       recipient_masked: null, modem_configured: false, supported: true };
-    this.plantSlotDates = Array(8).fill(null);
+    this.plantSlotDates = Array(6).fill(null);
   }
 
   async respond(value) {
@@ -910,7 +910,7 @@ export class MockVerdeApi {
         pestDetail: "No qualifying pest detection in this mock frame; this does not confirm pest-free plants.",
         confidence: "92%",
         classifications: [
-          { label: "Healthy", count: 8, confidence: "92%" },
+          { label: "Healthy", count: 6, confidence: "92%" },
           { label: "Yellowing", count: 0, confidence: null },
           { label: "Wilting", count: 0, confidence: null },
           { label: "Harvest-Ready", count: 0, confidence: null }
@@ -923,7 +923,7 @@ export class MockVerdeApi {
         confidence: "High",
         reason: "Sensor readings and plant condition agree."
       },
-      fusionBySlot: Array.from({ length: 8 }, (_, index) => ({
+      fusionBySlot: Array.from({ length: 6 }, (_, index) => ({
         slot: index + 1,
         sensorStatus: "Optimal",
         plantCondition: "Healthy",
@@ -965,7 +965,7 @@ export class MockVerdeApi {
   async getPlantSlots() {
     return this.respond(normalizePlantSlots({
       as_of: new Date().toISOString().slice(0, 10),
-      slot_count: 8,
+      slot_count: 6,
       slots: this.plantSlotDates.map((planted_on, index) => ({
         slot: index + 1, planted_on,
         days_growing: planted_on ? Math.floor((Date.now() - Date.parse(`${planted_on}T00:00:00`)) / 86_400_000) : null
@@ -975,7 +975,7 @@ export class MockVerdeApi {
 
   async updatePlantSlots(change) {
     const slot = change?.slot;
-    const valid = (value) => Number.isInteger(value) && value >= 1 && value <= 8;
+    const valid = (value) => Number.isInteger(value) && value >= 1 && value <= 6;
     if (change?.operation === "set" && valid(slot)) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(change.planted_on ?? "")
           || Number.isNaN(Date.parse(`${change.planted_on}T00:00:00`))

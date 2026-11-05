@@ -60,13 +60,13 @@ dialog .dose-form-error { color:#a32c27;font-size:.78rem;font-weight:700;margin:
 .nft-camera { position:relative; }
 .nft-camera-labels { position:absolute;inset:0;pointer-events:none; }
 .nft-camera-row { position:absolute;left:0;right:0; }
-.nft-camera-row.top { top:12%; }
-.nft-camera-row.bottom { bottom:7%; }
+.nft-camera-row.top { top:var(--nft-top-label-offset, 0px); }
+.nft-camera-row.bottom { bottom:var(--nft-bottom-label-offset, 0px); }
 .nft-camera-row .nft-slot { pointer-events:auto;box-shadow:0 2px 9px rgba(0,0,0,.45);background:rgba(255,255,255,.9); }
 .nft-rows { display:grid;gap:8px;margin-top:16px; }
 .nft-fusion { display:grid;gap:8px;margin-top:16px; }
 .nft-fusion>span { color:var(--muted);font-size:.72rem;font-weight:750; }
-.nft-fusion-row { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;direction:ltr;padding-bottom:4px; }
+.nft-fusion-row { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;direction:ltr;padding-bottom:4px; }
 .harvest-summary { color:var(--green);font-size:.82rem; }
 .nft-harvest-row .nft-fusion-card { align-content:start; }
 .nft-fusion-card { display:grid;gap:5px;direction:ltr;min-width:0;padding:10px;border:1px solid var(--line);border-radius:12px;background:#f7faf7; }
@@ -77,7 +77,7 @@ dialog .dose-form-error { color:#a32c27;font-size:.78rem;font-weight:700;margin:
 .nft-fusion-card.warn b { color:#a56b00; }
 .nft-fusion-card.danger b { color:#b53630; }
 .nft-rows>span { font-size:.72rem;font-weight:750;color:var(--muted); }
-.nft-slot-row { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;direction:ltr; }
+.nft-slot-row { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;direction:ltr; }
 .nft-slot { min-width:0;display:grid;gap:1px;justify-items:center;direction:ltr;border:1px solid #d0e4cf;border-radius:9px;background:#f1f8ee;color:var(--green);padding:7px 2px;cursor:pointer;font:inherit; }
 .nft-slot.planted { background:#dcf2db;border-color:#85c77f; }
 .nft-slot strong { font-size:.75rem; }

@@ -1,211 +1,157 @@
-# Dashboard pest section handoff: use integrated V8 output
+# Dashboard pest section: switch the dedicated card to integrated V8
 
-**Audience:** VERDE app lead  
-**Verified on Pi:** 2026-11-05 17:10 (Asia/Manila)  
-**Scope:** frontend/backend dashboard integration only
+**Audience:** VERDE app lead
 
-Do not change AI weights, fixed zones, `vision_worker_integrated.py`, or
-`verde-ai.service` as part of this work. Do not stop
-`verde-simulated-pest.service`; that is a separate decision for Emman.
+**Verified on Pi:** 2026-11-05
 
-## 1. Verified problem
+**Scope:** frontend-only dashboard change. Do not change AI models, model
+files, zones, `vision_worker_integrated.py`, backend code,
+`verde-ai.service`, or the Raspberry Pi AI deployment.
 
-The Pi currently has two pest-result pipelines.
+## 1. Problem
 
-### Main integrated camera and AI artifact
+The dedicated pest section still reads the old pest V6 output:
 
-The main application worker is `verde-ai.service`, which runs:
+- `/simulated-pest/latest.json`
+- `/simulated-pest/latest-annotated.jpg`
 
-`/home/verde/VERDE-Sensor-Integration/tools/vision_worker_integrated.py`
+Those files are produced by the user service
+`verde-simulated-pest.service`. Its `10-v6-demo.conf` drop-in runs the V6
+NCNN detector; `model.ncnn.bin` has SHA-256 prefix `706f4972...`.
 
-Its verified inputs are:
+On the same Pi camera frame, V6 reported **3** printed insect props while
+integrated pest V8 reported **5–6**. The V8 model is
+`printed_prop_v8.pt` with SHA-256 prefix `8ef40e09...`; it is the pest model
+reported in Table 6 of the thesis.
 
-| Purpose | File | SHA-256 prefix |
-|---|---|---|
-| Plant condition | `condition_yellowing_epoch8_best.pt` | `83f2f0e9...` |
-| Harvest readiness | `harvest_cls_v3.pt` | `3990ea79...` |
-| Printed insect props | `printed_prop_v8.pt` | `8ef40e09...` |
-| Fixed cup zones | `zones_final.json` | `75e032c2...` |
+The main camera capture already receives the integrated V8 result through the
+backend and is correct. It must not change visually or behaviorally.
 
-The worker writes:
+## 2. Exact code locations
 
-- `/home/verde/VERDE-Sensor-Integration/data/vision/latest.json`
-- `/home/verde/VERDE-Sensor-Integration/data/vision/annotated-latest.jpg`
+All line numbers below refer to the app branch at commit
+`8f526bf587078c13b5772600356bcb13310e1c3e`.
 
-`latest.json` includes `printed_props` (list), `pest_detection` (object),
-`generated_at`, `image_size`, and the other integrated vision fields. The main
-camera view is correct and must remain visually and functionally unchanged.
+### Edit only the dedicated pest section
 
-### Dedicated dashboard pest section
+File: `js/services/verde-api.js`
 
-The dedicated **SIMULATED PEST TEST** section currently reads:
+- **Lines 406–426 — `normalizeSimulatedPest(payload, now)`**
+  currently parses the V6-only contract:
+  - `status === "ok"`
+  - `checked_at_utc`
+  - `source_frame_mtime_utc`
+  - `visible_prop_count`
+  - `simulated_pest_detected`
+  - `/simulated-pest/latest-annotated.jpg`
+- **Line 681 in `getSnapshot()`** separately requests:
 
-- `/home/verde/VERDEapp/simulated-pest/latest.json`
-- `/home/verde/VERDEapp/simulated-pest/latest-annotated.jpg`
+  ```js
+  this.request(`/simulated-pest/latest.json?v=${Date.now()}`).catch(() => null)
+  ```
 
-Those files are written by the old user service
-`verde-simulated-pest.service`, including its `10-v6-demo.conf` drop-in. That
-service runs pest V6 NCNN; `model.ncnn.bin` has SHA-256 prefix
-`706f4972...`.
+Replace only the dedicated pest-card data path. The existing `/api/status`
+request at line 677 already supplies `state.pest_detection` and camera
+metadata.
 
-On the same Pi camera frame, V6 reported **3** printed props while integrated
-V8 reported **5**. V6 also adds approximately **35 seconds of CPU work per
-frame**. Therefore the dedicated dashboard section can disagree with the main
-integrated artifact even though both appear to describe the same scene.
+The dedicated pest card rendering in `js/app.js` may be adjusted only as
+needed to consume the new normalized V8 pest-section object. Keep that edit
+confined to the dedicated pest panel.
 
-The current frontend confirms this split:
+### Do not touch the main camera capture
 
-- `js/services/verde-api.js` requests `/simulated-pest/latest.json` separately.
-- `normalizeBackendSnapshot` also receives `state.pest_detection` from the
-  backend, which is derived from the integrated vision artifact.
-- `js/app.js` renders the dedicated simulated-pest card from the former rather
-  than from integrated V8.
+Do not alter the camera block in `normalizeBackendSnapshot()` around
+**lines 437–497**, including:
 
-## 2. Requested frontend/backend change
-
-Change only the dedicated dashboard pest section so its source of truth is the
-integrated V8 artifact at:
-
-`/home/verde/VERDE-Sensor-Integration/data/vision/latest.json`
-
-The browser should receive the required fields through a same-origin backend
-route or the existing normalized backend response. Do not expose an arbitrary
-filesystem-reading endpoint.
-
-### Count and status
-
-- Displayed count: `printed_props.length`.
-- Displayed status and message: the `pest_detection` object without replacing
-  its state with a count-derived guess.
-- Preserve the worker's two-consecutive-frame confirmation. A first positive
-  frame is `VERIFYING`; only the next consecutive positive frame becomes
-  `READY` / `Pest Detected`.
-- Display `generated_at` so the operator can see whether the inference is
-  current. Treat missing, invalid, future-dated, or stale timestamps as
-  unavailable rather than as “No Pest Detected.”
-
-### Exact V8 JSON contract
-
-The following line references are from the deployed file:
-
-`/home/verde/VERDE-Sensor-Integration/tools/vision_worker_integrated.py`
-
-#### `printed_props`
-
-Prop items are created at **lines 206–213**, retained after NMS at
-**lines 214–220**, and placed in the result as `printed_props` at
-**lines 292–299**.
-
-```json
-{
-  "class_name": "Pest Detected",
-  "confidence": 0.0,
-  "box_xyxy": [0.0, 0.0, 0.0, 0.0]
-}
+```js
+`/api/camera/annotated?v=${encodeURIComponent(camera.ai_capture_version ?? "latest")}`
+`/api/camera/frame?v=${encodeURIComponent(camera.capture_version ?? "latest")}`
 ```
 
-- `class_name`: currently the literal string `Pest Detected`.
-- `confidence`: floating-point score in `[0, 1]`.
-- `box_xyxy`: four full-resolution image coordinates
-  `[x1, y1, x2, y2]`, not width/height and not normalized values.
-- `image_size` in the parent artifact is `[width, height]` and must be used to
-  scale overlays to the displayed image.
+Do not change any of these backend files:
 
-#### `pest_detection`
+- `VERDE-Sensor-Integration/app/web/__init__.py`
+- `VERDE-Sensor-Integration/app/service.py`
+- `VERDE-Sensor-Integration/app/ml/vision/artifact.py`
+- `VERDE-Sensor-Integration/app/config.py`
 
-The confirmation and summary logic is at **lines 124–149**. Its shapes are:
+### Tests that reference the old addresses
 
-First positive frame:
+Update the frontend expectations to match removal of the separate V6 request:
 
-```json
-{
-  "status": "VERIFYING",
-  "value": null,
-  "confidence": 0.0,
-  "detail": "Possible printed prop in one frame; awaiting confirmation."
-}
+- `tests/verde-api.test.js:611`
+- `tests/verde-api.test.js:671`
+
+The Pi handoff also identified `tests/simulated-pest.test.js:17`. That file is
+not present in app repository commit `8f526bf`. If it exists in the app lead's
+Pi or working tree, savepoint it and update its old-address expectation. Do
+not create it solely to satisfy this handoff.
+
+## 3. Requested frontend-only behavior
+
+Use `state.pest_detection` from the existing `/api/status` response for the
+dedicated pest section.
+
+Map the fields as follows:
+
+| Dedicated section field | Existing backend value |
+|---|---|
+| Result | `state.pest_detection.value` |
+| Detail/count text | `state.pest_detection.detail` |
+| Confidence | `state.pest_detection.confidence` |
+| Freshness/version | `state.camera.ai_capture_version`, falling back to `state.camera.last_capture_timestamp` |
+| Image | `/api/camera/annotated?v=<camera.ai_capture_version>` |
+
+Expected result values are `Pest Detected` and `No Pest Detected`. The detail
+already contains the V8 printed-prop count; do not calculate or invent a
+different count in the frontend.
+
+When `state.pest_detection.status !== "READY"`, preserve an unavailable
+fallback. Do not present a non-READY, missing, malformed, or stale result as
+`No Pest Detected`.
+
+Use the existing V8 image URL:
+
+```text
+/api/camera/annotated?v=<camera.ai_capture_version>
 ```
 
-Second consecutive positive frame and later:
+This image is intentionally the same integrated annotated frame already used
+by the main camera view. Do not change how the main view obtains or displays
+that frame.
 
-```json
-{
-  "status": "READY",
-  "value": "Pest Detected",
-  "confidence": 0.0,
-  "detail": "5 possible printed insect prop(s) detected; farmer inspection recommended."
-}
-```
+After the dedicated section is verified using `/api/status`, remove the
+separate `/simulated-pest/latest.json` request from `getSnapshot()` and update
+the associated normalization call and tests.
 
-No qualifying props:
+## 4. Safety, acceptance, and rollback
 
-```json
-{
-  "status": "READY",
-  "value": "No Pest Detected",
-  "confidence": null,
-  "detail": "No qualifying printed-prop detection in the latest frame."
-}
-```
+### Savepoint every edited file before editing
 
-The artifact gains `schema_version`, `generated_at`, `source_mtime_ns`,
-`annotated_available`, and `total_inference_ms` at **lines 370–376**.
-
-### Dedicated image
-
-Preferred implementation:
-
-1. Show the existing raw camera frame.
-2. Draw only `printed_props[*].box_xyxy` client-side using an SVG or canvas
-   overlay.
-3. Scale X coordinates by `displayedWidth / image_size[0]` and Y coordinates
-   by `displayedHeight / image_size[1]`.
-4. Recalculate the overlay when the image loads or resizes.
-5. Do not draw condition, zone, or Harvest-Ready boxes in this dedicated pest
-   section.
-
-Short-time fallback: show the existing main AI-annotated image. This fallback
-contains condition/zone annotations and should be identified as the integrated
-view, but it still keeps both dashboard views on V8.
-
-Do not change the main camera capture or its annotation endpoint.
-
-## 3. Safety, savepoint, acceptance, and rollback
-
-### Savepoint before editing
-
-List every file that will be edited in the appropriate array before running
-these commands. Do not include files that will not be changed.
+Set `files` to the exact frontend files the app lead will edit. If an
+additional file becomes necessary, stop and add it to the savepoint before
+editing it.
 
 ```bash
 stamp="$(date +%Y%m%d-%H%M%S)"
-save="$HOME/verde-dashboard-savepoints/pest-section-v8-$stamp"
-mkdir -p "$save/VERDEapp" "$save/VERDE-Sensor-Integration"
+save="$HOME/VERDEapp/deploy/savepoints/$stamp-pest-section-v8"
 
-app_files=(
+files=(
   js/services/verde-api.js
   js/app.js
   tests/verde-api.test.js
 )
 
-# Add the exact backend route and test files selected by the app lead.
-backend_files=(
-)
+# Add this only if it exists and will be edited:
+# files+=(tests/simulated-pest.test.js)
 
-for file in "${app_files[@]}"; do
+mkdir -p "$save"
+
+for file in "${files[@]}"; do
   test -f "$HOME/VERDEapp/$file"
-  mkdir -p "$save/VERDEapp/$(dirname "$file")"
-  cp -p -- "$HOME/VERDEapp/$file" "$save/VERDEapp/$file"
-  cmp -- "$HOME/VERDEapp/$file" "$save/VERDEapp/$file"
-done
-
-for file in "${backend_files[@]}"; do
-  test -f "$HOME/VERDE-Sensor-Integration/$file"
-  mkdir -p "$save/VERDE-Sensor-Integration/$(dirname "$file")"
-  cp -p -- "$HOME/VERDE-Sensor-Integration/$file" \
-    "$save/VERDE-Sensor-Integration/$file"
-  cmp -- "$HOME/VERDE-Sensor-Integration/$file" \
-    "$save/VERDE-Sensor-Integration/$file"
+  mkdir -p "$save/$(dirname "$file")"
+  cp -p -- "$HOME/VERDEapp/$file" "$save/$file"
+  cmp -- "$HOME/VERDEapp/$file" "$save/$file"
 done
 
 (
@@ -218,76 +164,78 @@ done
 echo "SAVEPOINT READY: $save"
 ```
 
-If the app lead edits a file not listed above, stop and add it to the savepoint
-before changing it.
+### Implementation restrictions
 
-### Restrictions during implementation
+- Frontend change only; do not edit the backend.
+- Do not modify or restart `verde-ai.service`.
+- Leave `verde-simulated-pest.service` running. Stopping it is Emman's
+  separate decision.
+- Do not change any AI model, model file, zone configuration, or worker.
+- Do not modify the main camera capture block.
 
-- Do not restart or edit `verde-ai.service`.
-- Do not change AI models, fixed zones, or `vision_worker_integrated.py`.
-- Leave `verde-simulated-pest.service` running. Emman will decide separately
-  whether and when to stop it.
-- Keep the main camera capture and annotated view unchanged.
+### Tests
+
+Run the existing frontend tests after updating their old V6 request
+expectations:
+
+```bash
+cd "$HOME/VERDEapp"
+node --test
+```
+
+Add or update focused frontend coverage for:
+
+- V8 `Pest Detected` with confidence and detail.
+- V8 `No Pest Detected`.
+- Non-READY `pest_detection` producing the unavailable fallback.
+- Missing/malformed pest data producing the unavailable fallback.
+- The removed `/simulated-pest/latest.json` request.
+- The unchanged main-camera image URL and behavior.
 
 ### Acceptance checks
 
-Using one artifact generation identified by the same `generated_at`:
-
-1. The dedicated section count equals `len(printed_props)` in
-   `data/vision/latest.json`.
-2. Every displayed prop box corresponds to one `printed_props[*].box_xyxy`
-   item after scaling to the displayed image.
-3. The displayed status, value, confidence, and detail match
-   `pest_detection` for that artifact.
-4. The displayed inference timestamp matches `generated_at`, and stale output
-   is visibly identified.
-5. The main camera capture is visually unchanged.
-6. Existing frontend and backend tests pass, plus focused tests for READY,
-   VERIFYING, no-detection, stale, malformed, and missing artifacts.
+1. At the same observation time, the pest section text, detail/count, and
+   confidence match `/api/status` → `pest_detection`.
+2. The dedicated section uses
+   `/api/camera/annotated?v=<camera.ai_capture_version>`.
+3. The main camera capture shows the same image, labels, URL selection, and
+   behavior before and after the change.
+4. Non-READY pest results display the unavailable fallback.
+5. The frontend no longer requests `/simulated-pest/latest.json`.
+6. All frontend tests pass.
 
 ### Rollback
 
-Use the exact savepoint printed by the savepoint command:
+Restore the exact timestamped savepoint made before editing:
 
 ```bash
-save="$HOME/verde-dashboard-savepoints/pest-section-v8-YYYYMMDD-HHMMSS"
+save="$HOME/VERDEapp/deploy/savepoints/YYYYMMDD-HHMMSS-pest-section-v8"
 
-app_files=(
+files=(
   js/services/verde-api.js
   js/app.js
   tests/verde-api.test.js
 )
 
-# Repeat the exact backend file list used when the savepoint was created.
-backend_files=(
-)
+# Include this only if it was in the original savepoint:
+# files+=(tests/simulated-pest.test.js)
 
 (
   cd "$save"
   sha256sum -c SHA256SUMS.txt
 )
 
-for file in "${app_files[@]}"; do
-  cp -p -- "$save/VERDEapp/$file" "$HOME/VERDEapp/$file"
-  cmp -- "$save/VERDEapp/$file" "$HOME/VERDEapp/$file"
-done
-
-for file in "${backend_files[@]}"; do
-  cp -p -- "$save/VERDE-Sensor-Integration/$file" \
-    "$HOME/VERDE-Sensor-Integration/$file"
-  cmp -- "$save/VERDE-Sensor-Integration/$file" \
-    "$HOME/VERDE-Sensor-Integration/$file"
+for file in "${files[@]}"; do
+  cp -p -- "$save/$file" "$HOME/VERDEapp/$file"
+  cmp -- "$save/$file" "$HOME/VERDEapp/$file"
 done
 ```
 
-After restore, reload the dashboard with a cache-busting refresh. Restart only
-the frontend/backend service that the app lead intentionally changed, if its
-runtime requires a restart. Never restart `verde-ai.service` for this UI
-change.
+Reload the dashboard with a cache-busting refresh after implementation or
+rollback. No service restart is required for this static frontend change.
 
-## 4. Defense context
+## Defense context
 
-The pest model reported in **Table 6** of the thesis is printed-prop **V8**
-(`8ef40e09...`). After this frontend/backend change, both the main integrated
-camera view and the dedicated pest section will display results from that same
-V8 artifact.
+The pest model in thesis Table 6 is V8 (`8ef40e09...`). After this frontend
+change, both the main camera view and dedicated pest section will display the
+same integrated V8 result.

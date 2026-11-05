@@ -101,12 +101,11 @@ dialog .dose-form-error { color:#a32c27;font-size:.78rem;font-weight:700;margin:
 .dose-choice-list { display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end; }.dose-choice-list button { white-space:nowrap; }
 .pump-history { margin-top:16px; }.pump-dose-item { display:grid;grid-template-columns:1fr auto;gap:3px 12px;padding:12px 2px;border-bottom:1px solid #edf1ed; }.pump-dose-item:last-child { border-bottom:0;padding-bottom:2px; }.pump-dose-item strong,.pump-dose-item b { font-size:.8rem; }.pump-dose-item span,.pump-dose-item time { color:var(--muted);font-size:.68rem; }.pump-dose-item time { grid-column:1 / -1; }
 .correction-plan { margin-top:16px;padding:18px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow); }
-.correction-plan header { display:flex;align-items:flex-start;justify-content:space-between;gap:12px; }
-.correction-plan h2 { margin-top:5px;font-size:1rem; }
+.correction-plan header { display:flex;align-items:center;justify-content:space-between;gap:12px; }
 .correction-plan header a { color:var(--green);font-size:.72rem;font-weight:750;text-align:right; }
 .correction-plan ul { display:grid;gap:9px;margin:14px 0;padding:0;list-style:none; }
 .correction-plan li { display:grid;gap:4px;padding:11px 12px;background:var(--pale);border-radius:12px; }
 .correction-plan li strong { font-size:.8rem; }.correction-plan li span,.correction-plan p { color:var(--muted);font-size:.72rem;line-height:1.45; }
 .correction-plan .correction-request { margin-top:14px;padding:11px 12px;border:1px solid #f1d18c;border-radius:12px;background:#fff0ce;color:#8a3f15; }.correction-plan .correction-request strong { color:#8a3f15; }
-.correction-plan .correction-hold { margin-top:12px; }.correction-plan .dose-choice-list { margin-top:14px;justify-content:flex-start; }
+.correction-plan .dose-choice-list { margin-top:14px;justify-content:flex-start; }
 .correction-plan button { padding:10px 12px;border:0;border-radius:10px;font-weight:750; }

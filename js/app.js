@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=70";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=70";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=71";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=71";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -360,30 +360,10 @@ function correctionGuidance(data) {
   const canConfirm = data.pumpAutomation?.confirmationAvailable === true;
   const buttons = canConfirm ? `<div class="dose-choice-list">${choices.map(([, pump, label]) => `<button data-confirm-dose data-pump="${pump}" data-pump-label="${safe(label)}" type="button" class="primary">${critical ? "Manually dose" : "Confirm"} ${safe(label)}</button>`).join("")}</div>` : "";
   const manualRequest = critical ? `<p class="correction-request"><strong>Manual correction required for Critical readings.</strong> ${choices.length ? "The pumps named below indicate which solution is needed. Correct one condition at a time under supervision and remeasure after mixing." : "No dosing pump is recommended from the available readings; inspect the Critical condition."}</p>` : "";
-  const blocked = data.pumpAutomation?.manualDosingArmed
-    ? data.pumpAutomation?.manualWaitReason
-      ? `Circulation is stopped and automatic dosing is off. ${data.pumpAutomation.manualWaitReason}. Mix and verify with a separate meter before another dose.`
-      : `Circulation is stopped and automatic dosing is off. ${data.pumpAutomation?.criticalManualDose ? "Each confirmed Critical correction runs for 4.5 seconds (estimated 3.69 mL)." : "The selected pump uses its saved dose volume."} Select one recommended pump, then mix and verify with a separate meter. If the next fresh reading still needs correction, confirm another dose.`
-    : data.pumpAutomation?.circulationStopRequired
-      ? canConfirm && critical
-        ? "Circulation is stopped and automatic dosing is off. Select one recommended pump for a farmer-confirmed Critical correction after checking a separate meter."
-        : "Critical or faulty condition: circulation is stopped. To dose a recommended pump through the app, have an operator arm manual dosing at the Pi."
-    : /DISARMED/i.test(data.pumpAutomation?.hardwareStatus ?? "")
-      ? "The pump gateway is disarmed. A supervised circulation flow check and rearm are required before app dosing."
-      : canConfirm ? "Choose one recommended pump; the Pi checks live readings again before dosing."
-        : data.mode === "Full Automation" ? "Full Automation uses fresh readings and the saved pulse limits."
-          : "A pump dose is available only when fresh readings, circulation, and safety checks allow it.";
-  const fullMode = data.pumpAutomation?.manualDosingArmed
-    ? data.requestedMode === "Full Automation" && data.pumpAutomation?.autoResumeAvailable
-      ? "After fresh readings recover and the post-dose mixing wait ends, circulation and Full Automation resume automatically."
-      : "After recovery, disarm manual dosing and verify circulation flow before returning to Full Automation."
-    : data.requestedMode === "Full Automation"
-      ? "Requested Full Automation resumes after recovery if the gateway remains flow-armed."
-      : "After recovery, select Full Automation to resume automatic dosing.";
-  return `<section class="correction-plan" aria-label="Live correction guidance"><header><div><p class="eyebrow">LIVE CORRECTION GUIDANCE</p><h2>What the readings need</h2></div><a href="#History">View pump dosing history</a></header>
+  return `<section class="correction-plan" aria-label="Live correction guidance"><header><p class="eyebrow">LIVE CORRECTION GUIDANCE</p><a href="#History">View pump dosing history</a></header>
     ${manualRequest}
     ${actions || highEc ? `<ul>${actions}${highEc}</ul>` : `<p>No pH or EC pump correction is recommended from these readings.</p>`}
-    <p class="correction-hold">${safe(blocked)} ${safe(fullMode)}</p>${buttons}</section>`;
+    ${buttons}</section>`;
 }
 
 function renderDashboard(data) {
@@ -772,7 +752,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=70", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=71", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

@@ -109,3 +109,8 @@ dialog .dose-form-error { color:#a32c27;font-size:.78rem;font-weight:700;margin:
 .correction-plan .correction-request { margin-top:14px;padding:11px 12px;border:1px solid #f1d18c;border-radius:12px;background:#fff0ce;color:#8a3f15; }.correction-plan .correction-request strong { color:#8a3f15; }
 .correction-plan .dose-choice-list { margin-top:14px;justify-content:flex-start; }
 .correction-plan button { padding:10px 12px;border:0;border-radius:10px;font-weight:750; }
+
+.pest-camera { position:relative; }
+.pest-overlay { position:absolute;inset:0;width:100%;height:100%;pointer-events:none; }
+.pest-overlay rect { fill:none;stroke:#e43d21;stroke-width:7;vector-effect:non-scaling-stroke; }
+.pest-overlay text { fill:#fff;stroke:#a32316;stroke-width:8;paint-order:stroke;font-size:48px;font-weight:750; }

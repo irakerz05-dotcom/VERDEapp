@@ -609,10 +609,10 @@ test("real adapter uses same-origin routes, session token, and backend mode name
   assert.equal(snapshot.settings.backendConnected, true);
   assert.equal(result.activeMode, "Semi-Automation");
   assert.equal(acknowledged.system_status, backendState.system_status);
-  assert.deepEqual(calls.map((call) => call.url), ["/api/status", "/api/sensors/latest", "/api/sensors/health", "/api/session", "/api/mode", "/api/incidents/acknowledge"]);
-  assert.equal(calls[4].options.headers["X-VERDE-Token"], "test-token");
-  assert.deepEqual(JSON.parse(calls[4].options.body), { mode: "Full Automation Mode" });
-  assert.deepEqual(JSON.parse(calls[5].options.body), { issue_key: "vision:pest" });
+  assert.deepEqual(calls.map((call) => call.url), ["/api/status", "/api/sensors/latest", "/api/sensors/health", "/api/camera/pest-overlay", "/api/session", "/api/mode", "/api/incidents/acknowledge"]);
+  assert.equal(calls[5].options.headers["X-VERDE-Token"], "test-token");
+  assert.deepEqual(JSON.parse(calls[5].options.body), { mode: "Full Automation Mode" });
+  assert.deepEqual(JSON.parse(calls[6].options.body), { issue_key: "vision:pest" });
 });
 
 test("farmer dose confirmation uses the protected backend route and reports a blocked result", async () => {
@@ -669,10 +669,10 @@ test("real adapter keeps status and camera data when optional sensor routes are 
   assert.equal(snapshot.plant.cameraStatus, "CONNECTED");
   assert.equal(snapshot.plant.frameUrl, "/api/camera/frame?v=4");
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "pH").value, "6.1000");
-  assert.deepEqual(calls, ["/api/status", "/api/sensors/latest", "/api/sensors/health"]);
+  assert.deepEqual(calls, ["/api/status", "/api/sensors/latest", "/api/sensors/health", "/api/camera/pest-overlay"]);
 });
 
-test("integrated V8 pest result preserves backend text and confidence with an unannotated photo", () => {
+test("integrated V8 pest result preserves backend text and confidence with a raw fallback", () => {
   const now = Date.parse("2026-11-05T09:00:30Z");
   const camera = { ai_capture_version: "2026-11-05T09:00:00Z", ai_image_available: true, ai_status: "READY",
     image_available: true, status: "CONNECTED", capture_version: 42 };
@@ -680,23 +680,30 @@ test("integrated V8 pest result preserves backend text and confidence with an un
     detail: "5 possible printed insect prop(s) detected; farmer inspection recommended." };
   const result = normalizeIntegratedPest(pest, camera, now);
   assert.deepEqual(result, { detected: true, status: "Pest Detected", detail: pest.detail,
-    confidence: "69% confidence", frameUrl: "/api/camera/frame?v=42" });
+    confidence: "69% confidence", frameUrl: "/api/camera/frame?v=42", boxes: [], imageSize: null });
   assert.equal(normalizeIntegratedPest({ status: "READY", value: "No Pest Detected",
     detail: "No qualifying printed props.", confidence: null }, camera, now).detected, false);
 });
 
-test("dedicated pest photo uses the raw frame while main camera stays annotated", () => {
+test("dedicated pest photo uses matching V8 boxes while main camera stays annotated", () => {
   const version = new Date().toISOString();
   const state = { ...backendState, camera: { ...backendState.camera,
     ai_capture_version: version, ai_image_available: true, ai_status: "READY",
     image_available: true, status: "CONNECTED", capture_version: 42 },
     pest_detection: { status: "READY", value: "Pest Detected", detail: "5 possible printed props.", confidence: .7 } };
-  const snapshot = normalizeBackendSnapshot(state, { sensors: state.sensors });
+  const overlay = { generated_at: version, capture_id: "capture-3.jpg", image_size: [4608, 2592],
+    boxes: [{ box_xyxy: [100, 200, 180, 280], confidence: .8 }] };
+  const snapshot = normalizeBackendSnapshot(state, { sensors: state.sensors }, null, overlay);
   assert.equal(snapshot.plant.pestSection.status, state.pest_detection.value);
   assert.equal(snapshot.plant.pestSection.detail, state.pest_detection.detail);
-  assert.equal(snapshot.plant.pestSection.frameUrl, "/api/camera/frame?v=42");
+  assert.equal(snapshot.plant.pestSection.frameUrl, `/api/camera/history/capture-3.jpg?v=${encodeURIComponent(version)}`);
+  assert.deepEqual(snapshot.plant.pestSection.boxes, overlay.boxes);
   assert.equal(snapshot.plant.frameUrl, `/api/camera/annotated?v=${encodeURIComponent(version)}`);
   assert.equal(snapshot.plant.aiAnnotated, true);
+  const mismatched = normalizeBackendSnapshot(state, { sensors: state.sensors }, null,
+    { ...overlay, generated_at: "old" });
+  assert.equal(mismatched.plant.pestSection.frameUrl, "/api/camera/frame?v=42");
+  assert.deepEqual(mismatched.plant.pestSection.boxes, []);
 });
 
 test("integrated pest fallback rejects non-READY, malformed and stale responses", () => {

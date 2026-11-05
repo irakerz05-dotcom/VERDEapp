@@ -403,7 +403,7 @@ function historyLabel(timestamp, range) {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
 }
 
-export function normalizeIntegratedPest(pest, camera, now = Date.now()) {
+export function normalizeIntegratedPest(pest, camera, now = Date.now(), overlay = null) {
   const unavailable = { detected: null, status: "Pest analysis unavailable",
     detail: "No recent verified camera pest result.", confidence: null, frameUrl: null };
   const version = camera?.ai_capture_version ?? camera?.last_capture_timestamp;
@@ -417,17 +417,31 @@ export function normalizeIntegratedPest(pest, camera, now = Date.now()) {
         && (!Number.isFinite(pest.confidence) || pest.confidence < 0 || pest.confidence > 1))) {
     return unavailable;
   }
+  const size = overlay?.image_size;
+  const validOverlay = overlay?.generated_at === camera.ai_capture_version
+    && /^capture-[0-4]\.jpg$/.test(overlay.capture_id ?? "")
+    && Array.isArray(size) && size.length === 2 && size.every((value) => Number.isInteger(value) && value > 0)
+    && Array.isArray(overlay.boxes) && overlay.boxes.every((item) =>
+      Array.isArray(item.box_xyxy) && item.box_xyxy.length === 4
+      && item.box_xyxy.every(Number.isFinite)
+      && item.box_xyxy[0] >= 0 && item.box_xyxy[0] < item.box_xyxy[2] && item.box_xyxy[2] <= size[0]
+      && item.box_xyxy[1] >= 0 && item.box_xyxy[1] < item.box_xyxy[3] && item.box_xyxy[3] <= size[1]
+      && Number.isFinite(item.confidence) && item.confidence >= 0 && item.confidence <= 1);
   return {
     detected,
     status: pest.value,
     detail: pest.detail,
     confidence: Number.isFinite(pest.confidence) ? `${Math.round(pest.confidence * 100)}% confidence` : null,
-    frameUrl: camera?.image_available === true && !HARDWARE_FAULT_STATUS.test(String(camera?.status ?? ""))
-      ? `/api/camera/frame?v=${encodeURIComponent(camera.capture_version ?? "latest")}` : null
+    frameUrl: validOverlay
+      ? `/api/camera/history/${overlay.capture_id}?v=${encodeURIComponent(overlay.generated_at)}`
+      : camera?.image_available === true && !HARDWARE_FAULT_STATUS.test(String(camera?.status ?? ""))
+        ? `/api/camera/frame?v=${encodeURIComponent(camera.capture_version ?? "latest")}` : null,
+    boxes: validOverlay ? overlay.boxes : [],
+    imageSize: validOverlay ? size : null
   };
 }
 
-export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth = null) {
+export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth = null, pestOverlay = null) {
   if (!state || typeof state !== "object" || !state.sensors || !state.automation) {
     throw new Error("The VERDE backend returned an invalid status response.");
   }
@@ -484,7 +498,7 @@ export function normalizeBackendSnapshot(state, liveSensors = null, sensorHealth
     plant: {
       condition: resultValue(plant),
       status: plant.status ?? "UNAVAILABLE",
-      pestSection: normalizeIntegratedPest(pest, camera),
+      pestSection: normalizeIntegratedPest(pest, camera, Date.now(), pestOverlay),
       pestDetected: pest.value === "Pest Detected" ? true : pest.value === "No Pest Detected" ? false : null,
       pestStatus: resultValue(pest),
       pestDetail: pest.detail || "Pest analysis detail is unavailable.",
@@ -677,16 +691,17 @@ export class VerdeApi {
     // /api/status, but do not have the newer sensor detail routes. Those
     // optional routes must not make a working camera appear faulty.
     const state = await this.request("/api/status");
-    const [liveSensors, sensorHealth] = await Promise.all([
+    const [liveSensors, sensorHealth, pestOverlay] = await Promise.all([
       this.optionalRequest("/api/sensors/latest"),
-      this.optionalRequest("/api/sensors/health")
+      this.optionalRequest("/api/sensors/health"),
+      this.request("/api/camera/pest-overlay").catch(() => null)
     ]);
     const fallbackSensors = liveSensors ?? (state.sensors ? {
       sensors: state.sensors,
       timestamp: state.timestamp
     } : null);
     const fallbackHealth = sensorHealth ?? state.sensor_health ?? state.sensors_health ?? state.health ?? null;
-    return normalizeBackendSnapshot(state, fallbackSensors, fallbackHealth);
+    return normalizeBackendSnapshot(state, fallbackSensors, fallbackHealth, pestOverlay);
   }
 
   async optionalRequest(path) {

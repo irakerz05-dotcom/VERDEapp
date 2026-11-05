@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=73";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=73";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=74";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=74";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -474,6 +474,14 @@ function renderPlants(data, slots = null) {
   const pestSection = data.stale ? null : data.plant.pestSection;
   const pestDisplay = pestSection || { detected: null, status: "Pest analysis unavailable", detail: "No recent verified camera pest result.", confidence: null, frameUrl: null };
   const pestFrameUrl = safeResourceUrl(pestDisplay.frameUrl, window.location.href);
+  const pestBoxes = pestDisplay.boxes ?? [];
+  const pestSize = pestDisplay.imageSize;
+  const pestOverlay = pestSize && pestBoxes.length
+    ? `<svg class="pest-overlay" viewBox="0 0 ${pestSize[0]} ${pestSize[1]}" aria-label="${pestBoxes.length} pest annotations">${pestBoxes.map((item) => {
+      const [x1, y1, x2, y2] = item.box_xyxy;
+      const labelY = y1 < 56 ? y1 + 64 : y1 - 12;
+      return `<rect x="${x1}" y="${y1}" width="${x2 - x1}" height="${y2 - y1}" /><text x="${x1}" y="${labelY}">Pest ${Math.round(item.confidence * 100)}%</text>`;
+    }).join("")}</svg>` : "";
   const classificationCards = (data.plant.classifications ?? []).map((classification) => {
     const detected = Number.isInteger(classification.count) && classification.count > 0;
     const tone = classification.label === "Wilting" ? "danger"
@@ -488,7 +496,7 @@ function renderPlants(data, slots = null) {
     ${camera}
     <section class="plant-panel nft-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">▦</span><div><p class="eyebrow">NFT PLANTING RECORDS</p><h2>6 fixed plant slots</h2></div></div>${slots?.supported ? `<div class="nft-rows" aria-label="Plant slots"><span>Top NFT row</span>${plantSlotRow(slots, 1)}<span>Bottom NFT row</span>${plantSlotRow(slots, 4)}</div>${data.stale || !data.online || slots.error ? `<p role="status">${safe(slots.error || "Planting records may be stale. Reconnect before editing.")}</p>` : ""}` : `<p role="status">Planting records are unavailable until the Pi backend is updated.</p>`}</section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">PLANT CONDITION</p><h2>Vision analysis</h2></div></div><div class="classification-grid" aria-label="Latest per-class plant analysis">${classificationCards}</div></section>
-    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◌</span><div><p class="eyebrow">PEST DETECTION</p><h2>Printed insect props</h2></div></div><div class="notice ${pestDisplay.detected === null ? "warn" : pestDisplay.detected ? "danger" : "good"}"><b aria-hidden="true">${pestDisplay.detected === false ? "✓" : "!"}</b><div><strong>${safe(pestDisplay.status)}</strong><small>${safe(pestDisplay.detail)}${pestDisplay.confidence ? ` · ${safe(pestDisplay.confidence)}` : ""}</small></div></div>${pestFrameUrl ? `<figure class="camera-frame"><img src="${safe(pestFrameUrl)}" alt="Latest camera photo without detection boxes" /></figure>` : ""}</section>
+    <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◌</span><div><p class="eyebrow">PEST DETECTION</p><h2>Printed insect props</h2></div></div><div class="notice ${pestDisplay.detected === null ? "warn" : pestDisplay.detected ? "danger" : "good"}"><b aria-hidden="true">${pestDisplay.detected === false ? "✓" : "!"}</b><div><strong>${safe(pestDisplay.status)}</strong><small>${safe(pestDisplay.detail)}${pestDisplay.confidence ? ` · ${safe(pestDisplay.confidence)}` : ""}</small></div></div>${pestFrameUrl ? `<figure class="camera-frame"><div class="pest-camera"><img src="${safe(pestFrameUrl)}" alt="Camera photo with pest-only annotations when available" />${pestOverlay}</div></figure>` : ""}</section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">◉</span><div><p class="eyebrow">SENSOR-VISION FUSION</p><h2>By plant slot</h2></div></div>${data.fusionBySlot ? `<div class="nft-fusion" aria-label="Fusion confidence by NFT plant slot"><span>Top NFT row</span>${plantFusionRow(data.fusionBySlot, 1)}<span>Bottom NFT row</span>${plantFusionRow(data.fusionBySlot, 4)}</div>` : `<p class="classification-note" role="status">Per-plant fusion is unavailable.</p>`}</section>
     <section class="plant-panel"><div class="panel-head"><span class="big-icon" aria-hidden="true">♧</span><div><p class="eyebrow">HARVEST READINESS</p><h2>Healthy plants at 30+ days</h2></div></div><div class="nft-fusion" aria-label="Harvest readiness by NFT plant slot"><strong class="harvest-summary">${safe(readinessSummary)}</strong><span>Top NFT row</span>${harvestRow(readiness, 1)}<span>Bottom NFT row</span>${harvestRow(readiness, 4)}</div></section>`;
   app.innerHTML = renderShell(content, data);
@@ -753,7 +761,7 @@ if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=73", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=74", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {

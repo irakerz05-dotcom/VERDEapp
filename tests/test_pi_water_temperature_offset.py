@@ -11,7 +11,7 @@ from deploy.apply_pi_water_temperature_offset import OLD, NEW, plan
 class WaterTemperatureOffsetTests(unittest.TestCase):
     def test_guarded_patch_and_reapply(self):
         methods = next(new for label, _, new in REPLACEMENTS if label == "retry methods")
-        source = "# VERDE-SENSOR-RECOVERY-v3\nclass Reader:\n" + methods + "        pass\n"
+        source = "class Reader:\n" + methods + "        pass\n"
         updated, changed = plan(source)
         self.assertTrue(changed)
         self.assertIn('value = raw_value - 0.7', updated)

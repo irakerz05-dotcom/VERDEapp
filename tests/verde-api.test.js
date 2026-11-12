@@ -225,9 +225,19 @@ test("water temperature and humidity fail and recover independently", () => {
     const humidityCard = readings.find((item) => item.label === "Humidity");
     assert.equal(temperatureCard.status, expectedWater);
     assert.equal(humidityCard.status, expectedHumidity);
-    assert.equal(temperatureCard.value, expectedWater === "CONNECTED" ? "25.125" : "—");
+    assert.equal(temperatureCard.value, expectedWater === "CONNECTED" ? "25.13" : "—");
     assert.equal(humidityCard.value, expectedHumidity === "OPTIMAL" ? "72" : "—");
   }
+});
+
+test("corrected water temperature is shown with two decimals without changing its classification", () => {
+  const readings = normalizeLiveSensorSnapshot({ sensors: {
+    water_temperature: { value_C: 25.237000000000002, raw_value_C: 25.937,
+      classification: "SUBOPTIMAL", status: "OK: software offset -0.7 C" }
+  } });
+  const water = readings.find((item) => item.label === "Water Temperature");
+  assert.equal(water.value, "25.24");
+  assert.equal(water.status, "SUBOPTIMAL");
 });
 
 test("transient retries and different sample generations never expose old values as live", () => {
@@ -247,7 +257,7 @@ test("transient retries and different sample generations never expose old values
     water_temperature: "ERROR: CRC failure", ambient_humidity: "ERROR: incomplete buffer"
   } };
   const current = normalizeLiveSensorSnapshot(latest, olderHealth);
-  assert.equal(current.find((item) => item.label === "Water Temperature").value, "25");
+  assert.equal(current.find((item) => item.label === "Water Temperature").value, "25.00");
   assert.equal(current.find((item) => item.label === "Humidity").value, "72");
 
   const newerHealth = { sample: 44, sensors: { water_temperature: "ERROR: CRC failure", ambient_humidity: "CONNECTED" } };
@@ -272,7 +282,7 @@ test("recovering water temperature shows a recent last reading as non-live", () 
   const readings = normalizeLiveSensorSnapshot({ sensors });
   const water = readings.find((item) => item.label === "Water Temperature");
   const humidity = readings.find((item) => item.label === "Humidity");
-  assert.equal(water.value, "24.625");
+  assert.equal(water.value, "24.63");
   assert.equal(humidity.value, "—");
   assert.equal(water.status, "Recovering");
   assert.equal(humidity.status, "Recovering");

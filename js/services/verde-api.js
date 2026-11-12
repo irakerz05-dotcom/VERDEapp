@@ -275,7 +275,7 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
         && priorAge >= 0 && priorAge <= MAX_RECOVERY_AGE_MS;
       return {
         ...presentation,
-        value: showPrior ? String(priorValue) : "—",
+        value: showPrior ? priorValue.toFixed(2) : "—",
         unit: liveSensorUnit(key, sensor),
         status: "Recovering",
         detail: showPrior ? "Last valid reading (not live); sensor is retrying."
@@ -302,7 +302,8 @@ export function normalizeLiveSensorSnapshot(payload, health = null) {
     const faulty = isFaultySensorReading(key, value, sensor, healthStatus);
     return {
       ...presentation,
-      value: faulty ? "—" : (["ph", "ec", "turbidity"].includes(key) ? Number(value).toFixed(4) : String(value)),
+      value: faulty ? "—" : key === "water_temperature" ? value.toFixed(2)
+        : (["ph", "ec", "turbidity"].includes(key) ? Number(value).toFixed(4) : String(value)),
       unit: liveSensorUnit(key, sensor),
       status: faulty ? "Faulty Sensors" : sensorStatus({ value, raw_value: sensor.raw_value, status: liveSensorBadge(key, sensor, value) }),
       detail: faulty ? "" : liveSensorDetail(key, sensor, health?.sensors?.[healthKey]),

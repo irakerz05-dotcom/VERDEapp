@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=76";
-import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=76";
+import { MockVerdeApi, VerdeApi, markSnapshotStale } from "./services/verde-api.js?v=77";
+import { PAGES, buildChartGeometry, escapeHtml, formatHistoryValue, harvestReadiness, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=77";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -759,14 +759,24 @@ window.addEventListener("appinstalled", () => {
 
 if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
+  let reloadingForUpdate = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!reloadingForUpdate && navigator.serviceWorker.controller) {
+      reloadingForUpdate = true;
+      window.location.reload();
+    }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) navigator.serviceWorker.getRegistration().then((registration) => registration?.update()).catch(() => {});
+  });
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js?v=76", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./service-worker.js?v=77", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {
           if (worker.state === "installed" && navigator.serviceWorker.controller) {
-            showToast("A VERDE update is ready. Close and reopen the app to use it.");
+            showToast("Updating VERDE to the latest version…");
           }
         });
       });

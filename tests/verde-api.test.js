@@ -4,6 +4,7 @@ import {
   MockVerdeApi,
   VerdeApi,
   calibrateHumidity,
+  humidityStatus,
   normalizeBackendEvents,
   normalizeBackendHistory,
   normalizeBackendSnapshot
@@ -13,6 +14,11 @@ test("humidity calibration adds six percentage points and clamps to valid RH", (
   assert.equal(calibrateHumidity(50), 56);
   assert.equal(calibrateHumidity(97), 100);
   assert.equal(calibrateHumidity(0), 6);
+});
+
+test("humidity status uses the calibrated value, not the raw backend value", () => {
+  assert.equal(humidityStatus(calibrateHumidity(42), { status: "SUBOPTIMAL" }), "SUBOPTIMAL");
+  assert.equal(humidityStatus(calibrateHumidity(59), { status: "SUBOPTIMAL" }), "OPTIMAL");
 });
 
 test("snapshot contains complete mock dashboard, plant, fusion, and settings data", async () => {
@@ -107,6 +113,7 @@ test("backend status is normalized without inventing unavailable readings or AI 
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "TDS").isRaw, true);
   assert.match(snapshot.sensors.find((sensor) => sensor.label === "TDS").detail, /raw voltage/);
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Ambient Humidity").value, "83");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Ambient Humidity").status, "SUBOPTIMAL");
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "pH").value, "6.1");
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "EC").value, "1.5");
   assert.equal(backendState.sensors.ambient_humidity.value, 77);

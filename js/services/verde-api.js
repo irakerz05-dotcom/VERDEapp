@@ -119,11 +119,20 @@ const SENSOR_PRESENTATION = {
 const HARDWARE_FAULT_STATUS = /fault|error|not\s*connected|disconnected|offline|unavailable|missing|unknown/i;
 
 export const HUMIDITY_CALIBRATION_OFFSET = 6;
+export const HUMIDITY_OPTIMAL_MIN = 65;
+export const HUMIDITY_OPTIMAL_MAX = 78;
 
 export function calibrateHumidity(rawHumidity) {
   const value = finiteNumber(rawHumidity);
   if (value === null) return null;
   return Math.min(100, Math.max(0, value + HUMIDITY_CALIBRATION_OFFSET));
+}
+
+export function humidityStatus(calibratedHumidity, sensor = {}) {
+  const value = finiteNumber(calibratedHumidity);
+  const backendStatus = String(sensor.status ?? "").trim();
+  if (value === null || !backendStatus || HARDWARE_FAULT_STATUS.test(backendStatus)) return sensorStatus(sensor);
+  return value >= HUMIDITY_OPTIMAL_MIN && value <= HUMIDITY_OPTIMAL_MAX ? "OPTIMAL" : "SUBOPTIMAL";
 }
 
 const DISPLAY_TO_BACKEND_MODE = {
@@ -180,12 +189,15 @@ export function normalizeBackendSnapshot(state) {
     const calibratedValue = key === "ambient_humidity" ? calibrateHumidity(sensor.value) : sensor.value;
     const rawValue = finiteNumber(sensor.raw_value);
     const showRaw = (calibratedValue === null || calibratedValue === undefined) && rawValue !== null;
+    const displayStatus = key === "ambient_humidity"
+      ? humidityStatus(calibratedValue, sensor)
+      : sensorStatus(sensor);
     return {
       ...presentation,
       value: showRaw ? String(rawValue) : calibratedValue === null || calibratedValue === undefined ? "—" : String(calibratedValue),
       unit: showRaw ? sensor.raw_unit ?? "V" : sensor.unit ?? "",
-      status: sensorStatus(sensor),
-      detail: sensor.detail ?? (sensorStatus(sensor) === "Faulty Sensors" ? "The backend is not producing a reading." : ""),
+      status: displayStatus,
+      detail: sensor.detail ?? (displayStatus === "Faulty Sensors" ? "The backend is not producing a reading." : ""),
       isRaw: showRaw,
       lastReadingAt: sensor.last_reading_timestamp ?? null
     };
@@ -446,7 +458,7 @@ export class MockVerdeApi {
         { label: "TDS", value: "750", unit: "ppm", status: "Normal", icon: "⋮" },
         { label: "Water Temperature", value: "22.1", unit: "°C", status: "Optimal", icon: "♨" },
         { label: "Turbidity", value: "3.2", unit: "NTU", status: "Optimal", icon: "≋" },
-        { label: "Ambient Humidity", value: String(calibrateHumidity(72)), unit: "%", status: "Normal", icon: "◌" }
+        { label: "Ambient Humidity", value: String(calibrateHumidity(72)), unit: "%", status: humidityStatus(calibrateHumidity(72), { status: "CONNECTED" }), icon: "◌" }
       ],
       waterQuality: {
         status: "Optimal",

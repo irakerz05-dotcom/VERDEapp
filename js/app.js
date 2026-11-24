@@ -1,5 +1,5 @@
-import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=14";
-import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=14";
+import { MockVerdeApi, VerdeApi } from "./services/verde-api.js?v=15";
+import { PAGES, buildChartGeometry, escapeHtml, niceTime, normalizePage, safeResourceUrl, statusClass } from "./verde-ui.js?v=15";
 
 const query = new URLSearchParams(window.location.search);
 const requestedDelay = query.has("mockDelay") ? Number(query.get("mockDelay")) : 120;
@@ -393,7 +393,7 @@ window.addEventListener("offline", render);
 
 if (!window.location.hash) window.history.replaceState(null, "", "#Dashboard");
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" }).catch(() => {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js?v=15", { updateViaCache: "none" }).catch(() => {
     showToast("Offline installation is unavailable in this browser.", "warn");
   }));
 }

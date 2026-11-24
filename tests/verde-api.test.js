@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   MockVerdeApi,
   VerdeApi,
+  calibrateHumidity,
   markSnapshotStale,
   normalizeBackendEvents,
   normalizeBackendHistory,
@@ -12,6 +13,22 @@ import {
   normalizeFusionBySlot,
   normalizePlantSlots
 } from "../js/services/verde-api.js";
+
+test("humidity calibration applies once to live, history, and mock displays", async () => {
+  assert.equal(calibrateHumidity(42), 48);
+  assert.equal(calibrateHumidity(59), 65);
+  assert.equal(calibrateHumidity(97), 100);
+  assert.equal(calibrateHumidity(null), null);
+  const raw = { value: 59, status: "CONNECTED: DHT11" };
+  const card = normalizeLiveSensorSnapshot({ sensors: { ambient_humidity: raw } })
+    .find((item) => item.label === "Humidity");
+  assert.equal(card.value, "65");
+  assert.equal(card.status, "OPTIMAL");
+  assert.equal(raw.value, 59);
+  const mock = new MockVerdeApi({ delay: 0 });
+  assert.equal((await mock.getSnapshot()).sensors.find((item) => item.label === "Humidity").value, "68");
+  assert.equal((await mock.getHistory("Today", "ambient_humidity")).current, 68);
+});
 
 test("per-plant fusion keeps fixed slots and invalidates old results when disconnected", () => {
   const rows = Array.from({ length: 6 }, (_, index) => ({
@@ -94,7 +111,7 @@ test("sensor connection status controls fault display without value thresholds",
   const ec = snapshot.find((item) => item.label === "EC");
   assert.equal(ec.status, "CONNECTED");
   assert.equal(ec.value, "0.0386");
-  assert.equal(snapshot.find((item) => item.label === "Humidity").value, "51");
+  assert.equal(snapshot.find((item) => item.label === "Humidity").value, "57");
 
   const normalPh = normalizeLiveSensorSnapshot({ sensors: {
     ph: { value: 7, status: "CONNECTED" },
@@ -181,13 +198,13 @@ test("a project-reference NTU reading remains numeric with metadata retained", (
 
 test("live humidity is OPTIMAL only from 65% through 78% inclusive", () => {
   for (const [value, expected] of [
-    [64.9, "SUBOPTIMAL"], [65, "OPTIMAL"], [72, "OPTIMAL"],
-    [78, "OPTIMAL"], [78.1, "SUBOPTIMAL"]
+    [58.9, "SUBOPTIMAL"], [59, "OPTIMAL"], [66, "OPTIMAL"],
+    [72, "OPTIMAL"], [72.1, "SUBOPTIMAL"]
   ]) {
     const humidity = normalizeLiveSensorSnapshot({ sensors: {
       ambient_humidity: { value, status: "CONNECTED: DHT11" }
     } }).find((item) => item.label === "Humidity");
-    assert.equal(humidity.value, String(value));
+    assert.equal(humidity.value, String(calibrateHumidity(value)));
     assert.equal(humidity.status, expected);
   }
 
@@ -226,7 +243,7 @@ test("water temperature and humidity fail and recover independently", () => {
     assert.equal(temperatureCard.status, expectedWater);
     assert.equal(humidityCard.status, expectedHumidity);
     assert.equal(temperatureCard.value, expectedWater === "CONNECTED" ? "25.13" : "—");
-    assert.equal(humidityCard.value, expectedHumidity === "OPTIMAL" ? "72" : "—");
+    assert.equal(humidityCard.value, expectedHumidity === "OPTIMAL" ? "78" : "—");
   }
 });
 
@@ -247,7 +264,7 @@ test("transient retries and different sample generations never expose old values
   } });
   assert.equal(recovering.find((item) => item.label === "Water Temperature").status, "Recovering");
   assert.equal(recovering.find((item) => item.label === "Water Temperature").value, "—");
-  assert.equal(recovering.find((item) => item.label === "Humidity").value, "70");
+  assert.equal(recovering.find((item) => item.label === "Humidity").value, "76");
 
   const latest = { system: { sample: 43 }, sensors: {
     water_temperature: { value_C: 25, status: "OK" },
@@ -258,7 +275,7 @@ test("transient retries and different sample generations never expose old values
   } };
   const current = normalizeLiveSensorSnapshot(latest, olderHealth);
   assert.equal(current.find((item) => item.label === "Water Temperature").value, "25.00");
-  assert.equal(current.find((item) => item.label === "Humidity").value, "72");
+  assert.equal(current.find((item) => item.label === "Humidity").value, "78");
 
   const newerHealth = { sample: 44, sensors: { water_temperature: "ERROR: CRC failure", ambient_humidity: "CONNECTED" } };
   const incoherent = normalizeLiveSensorSnapshot(latest, newerHealth);
@@ -406,7 +423,7 @@ test("backend status is normalized without inventing unavailable readings or AI 
   assert.match(snapshot.modeOverride, /Required water sensor/);
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Water Temperature").value, "—");
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Water Temperature").status, "Faulty Sensors");
-  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Humidity").value, "77");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Humidity").value, "83");
   assert.equal(snapshot.plant.pestDetected, null);
   assert.equal(snapshot.plant.frameUrl, "/api/camera/frame?v=4");
   assert.equal(snapshot.incidents[0].issueKey, "vision:pest");
@@ -524,7 +541,8 @@ test("history supports every sensor and selects an available metric without inve
   assert.equal(automatic.metricKey, "water_temperature");
   assert.deepEqual(automatic.values, [30.2, 30.3]);
   assert.equal(humidity.metricKey, "ambient_humidity");
-  assert.equal(humidity.current, 83);
+  assert.deepEqual(humidity.values, [88, 89]);
+  assert.equal(humidity.current, 89);
   assert.equal(humidity.metrics.find((metric) => metric.key === "ph").sampleCount, 0);
 });
 

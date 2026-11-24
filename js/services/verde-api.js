@@ -127,6 +127,7 @@ const SENSOR_PRESENTATION = {
 
 const HARDWARE_FAULT_STATUS = /fault|error|not\s*connected|disconnected|offline|unavailable|missing|unknown/i;
 const SENSOR_DISPLAY_LIMITS = { ph: { maximum: 15 } };
+export const HUMIDITY_CALIBRATION_OFFSET = 6;
 const HUMIDITY_OPTIMAL_MIN = 65;
 const HUMIDITY_OPTIMAL_MAX = 78;
 const MAX_RECOVERY_AGE_MS = 90_000;
@@ -146,10 +147,16 @@ function finiteNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+export function calibrateHumidity(rawHumidity) {
+  const value = finiteNumber(rawHumidity);
+  return value === null ? null : Math.min(100, Math.max(0, value + HUMIDITY_CALIBRATION_OFFSET));
+}
+
 function liveSensorValue(key, sensor) {
   if (key === "ec") return finiteNumber(sensor.value_mScm ?? sensor.value);
   if (key === "turbidity") return finiteNumber(sensor.value_ntu ?? sensor.value);
   if (key === "water_temperature") return finiteNumber(sensor.value_C ?? sensor.value);
+  if (key === "ambient_humidity") return calibrateHumidity(sensor.value);
   return finiteNumber(sensor.value);
 }
 
@@ -590,7 +597,8 @@ export function normalizeBackendHistory(rows, range = "Today", now = new Date(),
     .filter((row) => Number.isFinite(Date.parse(row?.timestamp)) && Date.parse(row.timestamp) >= start)
     .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
   const metrics = HISTORY_METRICS.map((metric) => summarizeHistoryMetric(metric, validRows
-    .map((row) => ({ timestamp: row.timestamp, label: historyLabel(row.timestamp, selectedRange), value: finiteNumber(row[metric.key]) }))
+    .map((row) => ({ timestamp: row.timestamp, label: historyLabel(row.timestamp, selectedRange),
+      value: metric.key === "ambient_humidity" ? calibrateHumidity(row[metric.key]) : finiteNumber(row[metric.key]) }))
     .filter((sample) => sample.value !== null)));
   const incidents = normalizeBackendEvents(eventRows).filter((event) =>
     (event.state === "OPEN" || event.state === "RESOLVED")
@@ -913,7 +921,7 @@ export class MockVerdeApi {
         { label: "EC", value: "1.5", unit: "mS/cm", status: "Optimal", icon: "⌁" },
         { label: "Turbidity", value: "1.00", unit: "NTU", status: "Optimal", icon: "≋", detail: "Project NTU estimate · user-assigned 1.0 reference" },
         { label: "Water Temperature", value: "22.1", unit: "°C", status: "Optimal", icon: "♨" },
-        { label: "Humidity", value: "62", unit: "%", status: "SUBOPTIMAL", icon: "○" },
+        { label: "Humidity", value: String(calibrateHumidity(62)), unit: "%", status: "OPTIMAL", icon: "○" },
       ],
       waterQuality: {
         status: "Optimal",
@@ -965,7 +973,7 @@ export class MockVerdeApi {
       selected.series[metric.key].map((value, index) => ({
         timestamp: new Date(Date.now() - (selected.labels.length - 1 - index) * 60 * 60 * 1_000).toISOString(),
         label: selected.labels[index],
-        value
+        value: metric.key === "ambient_humidity" ? calibrateHumidity(value) : value
       }))));
     const incidents = normalizeBackendEvents(mockEventRows()).filter((event) => event.state);
     return this.respond(historyView(selected.range, metrics, selectedMetric, incidents, []));

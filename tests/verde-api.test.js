@@ -3,10 +3,17 @@ import assert from "node:assert/strict";
 import {
   MockVerdeApi,
   VerdeApi,
+  calibrateHumidity,
   normalizeBackendEvents,
   normalizeBackendHistory,
   normalizeBackendSnapshot
 } from "../js/services/verde-api.js";
+
+test("humidity calibration adds six percentage points and clamps to valid RH", () => {
+  assert.equal(calibrateHumidity(50), 56);
+  assert.equal(calibrateHumidity(97), 100);
+  assert.equal(calibrateHumidity(0), 6);
+});
 
 test("snapshot contains complete mock dashboard, plant, fusion, and settings data", async () => {
   const api = new MockVerdeApi({ delay: 0 });
@@ -99,7 +106,10 @@ test("backend status is normalized without inventing unavailable readings or AI 
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "TDS").unit, "V");
   assert.equal(snapshot.sensors.find((sensor) => sensor.label === "TDS").isRaw, true);
   assert.match(snapshot.sensors.find((sensor) => sensor.label === "TDS").detail, /raw voltage/);
-  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Ambient Humidity").value, "77");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "Ambient Humidity").value, "83");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "pH").value, "6.1");
+  assert.equal(snapshot.sensors.find((sensor) => sensor.label === "EC").value, "1.5");
+  assert.equal(backendState.sensors.ambient_humidity.value, 77);
   assert.equal(snapshot.plant.pestDetected, null);
   assert.equal(snapshot.plant.frameUrl, "/api/camera/frame?v=4");
 });
@@ -145,7 +155,7 @@ test("history supports every sensor and selects an available metric without inve
   assert.equal(automatic.metricKey, "water_temperature");
   assert.deepEqual(automatic.values, [30.2, 30.3]);
   assert.equal(humidity.metricKey, "ambient_humidity");
-  assert.equal(humidity.current, 83);
+  assert.equal(humidity.current, 89);
   assert.equal(humidity.metrics.find((metric) => metric.key === "ph").sampleCount, 0);
 });
 
